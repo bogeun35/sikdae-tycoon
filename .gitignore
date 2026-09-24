@@ -1,0 +1,22 @@
+node_modules/
+dist/
+test-shots/
+*.log
+_backup/
+src.before-*/
+*.before-*
+.claude/
+scripts/balance/.cache/
+scripts/balance/out/*.json
+scripts/balance/out/*.log
+scripts/balance/_check/
+
+# 로컬 전용(이 PC 경로가 들어 있음)
+scripts/shot-web.js
+scripts/release.js
+scripts/play-final.js
+scripts/check-html.mjs
+scripts/balance/verify-real.cjs
+src/audio/dev/measure.cjs
+BUILD.md
+BALANCE.md

@@ -1,0 +1,26 @@
+{
+  "name": "sikdae-tycoon",
+  "version": "0.1.0",
+  "description": "식권대장 타이쿤 (HTML 한 파일)",
+  "author": "bogeun",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "release": "node scripts/release.js",
+    "shot": "node scripts/shot-web.js",
+    "shot:desktop": "node scripts/shot-web.js --preset desktop --check-fullscreen",
+    "shot:phone": "node scripts/shot-web.js --preset phone --check-fullscreen",
+    "shot:all": "node scripts/shot-web.js --preset desktop --check-fullscreen && node scripts/shot-web.js --preset phone --check-fullscreen && node scripts/shot-web.js --preset phone-land --check-fullscreen",
+    "audit": "node scripts/audit-keys.mjs"
+  },
+  "devDependencies": {
+    "@fontsource/jua": "^5.3.0",
+    "gsap": "^3.15.0",
+    "pixi-filters": "^6.1.5",
+    "pixi.js": "^8.21.0",
+    "typescript": "~5.9",
+    "vite": "^8.3.0",
+    "vite-plugin-singlefile": "^2.3.3"
+  }
+}
