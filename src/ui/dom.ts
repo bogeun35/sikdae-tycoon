@@ -38,11 +38,30 @@ export function esc(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] as string);
 }
 
-export function bump(e: Element | null): void {
+/**
+ * 알약 튀기(1.14배, 영업 HUD 는 1.05배 0.25초). Web Animations 로 — 클래스를 뗐다 붙이며 offsetWidth 를 읽으면
+ * 매번 레이아웃을 강제해서(설계서 7장 3) 코인이 연달아 도착하면 프레임마다 리플로가 났다. 같은 요소는 120ms 에 한 번만.
+ */
+const bumpAt = new WeakMap<Element, number>();
+export function bump(e: Element | null, scale?: number): void {
   if (!e) return;
-  e.classList.remove('bump');
-  void (e as HTMLElement).offsetWidth;
-  e.classList.add('bump');
+  const now = performance.now();
+  const last = bumpAt.get(e) || 0;
+  if (now - last < 120) return;
+  bumpAt.set(e, now);
+  const s = scale ?? (e.closest('.lhud') ? 1.05 : 1.14);
+  const el = e as HTMLElement;
+  if (typeof el.animate !== 'function') return;
+  el.animate([{ transform: 'scale(1)' }, { transform: `scale(${s})`, offset: 0.45 }, { transform: 'scale(1)' }], { duration: 250, easing: 'ease' });
+}
+/**
+ * CSS 애니메이션 클래스를 처음부터 다시 걸기(레이아웃 강제 없이): 떼고 다음 프레임에 붙임.
+ * 옛 방식(void offsetWidth)은 부를 때마다 동기 레이아웃을 일으킴.
+ */
+export function restartClass(e: Element | null, cls: string, drop: string[] = []): void {
+  if (!e) return;
+  e.classList.remove(cls, ...drop);
+  requestAnimationFrame(() => e.classList.add(cls));
 }
 export function shakeEl(e: Element | null): void {
   if (!e) return;
@@ -133,6 +152,9 @@ export function tapKey(key: string, can: () => boolean, buy: () => void, info: (
   }, 170);
 }
 
+/** 숫자(×·+ 로 시작하는 것 포함)를 앞 낱말과 붙여 줄바꿈: "제휴점 13" 이 "제휴점 / 13" 으로 갈리지 않게 */
+export const nb = (s: string): string => s.replace(/ (?=[0-9×+])/g, '\u00a0');
+
 /* ── 토스트: 위 가운데, 2.4초, 동시 3 ── */
 let toastBox: HTMLElement | null = null;
 export function mountToasts(root: HTMLElement): void {
@@ -173,8 +195,17 @@ function placeToasts(box: HTMLElement): void {
     box.style.left = `${Math.round((L - ur.left) / kd + 8)}px`;
     box.style.right = `${Math.round((ur.right - R) / kd + 8)}px`;
   } else if (bottom > ur.top) {
+    /* HUD 아래로 내려갈 때는 트리 머리 막대([가운데로] 포함)도 건너뜀 */
+    for (const e of Array.from(ui.querySelectorAll<HTMLElement>('#office.on .treehead .th, #office.on .treehead .tcenter'))) {
+      const b = e.getBoundingClientRect();
+      if (b.width && b.height && b.top < bottom + 60 * kd && getComputedStyle(e).display !== 'none') bottom = Math.max(bottom, b.bottom);
+    }
     box.style.top = `${Math.round((bottom - ur.top) / kd + 8)}px`;
   }
+}
+/** 떠 있는 토스트를 모두 걷음(영업 시작 때: 사무실 안내가 지도 위에 남지 않게) */
+export function clearToasts(): void {
+  if (toastBox) toastBox.innerHTML = '';
 }
 export function toast(msg: string, icon?: string): void {
   if (!toastBox) return;

@@ -14,6 +14,8 @@ declare global {
       launches: number;
       fullscreen: boolean;
       errors: string[];
+      /** 성능 검수 훅(렌더 횟수·작업 ms 등 숫자만, 설계서 7장) */
+      perf?: Record<string, number | string>;
     };
   }
   interface Document {

@@ -1,21 +1,24 @@
 /**
  * 하단 설명 바: [아이콘] [제목 / 설명] [가격 + 두 줄]. 가격 자리 상태 5가지(원작 그대로):
- *  살 수 있음 = 초록 "두 번 누르면 구매!" / 돈 부족 = 빨강 "매출 N 부족"(· P N 부족) / 이웃 미보유 = 회색 "연결된 칸 먼저" / 최대 = 보라 "최대" / 잠김 = 회색 조건 문구
+ *  살 수 있음 = 초록 "두 번 누르면 구매!" / 재화 부족 = 빨강 가격 + "매출 부족"(기술력 부족 · 매출·기술력 부족) / 이웃 미보유 = 회색 "연결된 칸 먼저" / 최대 = 보라 "최대" / 잠김 = 회색 자물쇠 + 조건 문구("먼저: 칸 이름")
+ *  보유 매출·기술력은 위 HUD 에 늘 있어서 여기엔 되풀이하지 않고, 모자란 액수도 가격과 겹쳐서 빼고 "부족" 만.
+ *  가격은 재화 아이콘(매출 = 동전, 기술력 = 톱니)으로 어느 재화로 사는지 보여 준다.
+ *  제목 옆 chips = 효과 종류 칩(설계서 6장, 카드·트리 칸과 같은 칩).
  */
 import { fmt } from '../game/format';
-import { S } from '../game/state';
+import { lackOf, payable, type Cost } from '../game/rules';
 import { img } from './dom';
 
 export type SheetState = 'buy' | 'max' | 'link' | 'lock' | 'none';
-export interface Cost { rev: number; point: number }
+export type { Cost };
 
 export class Sheet {
   constructor(readonly el: HTMLElement) {}
   private cur: (() => void) | null = null;
 
-  show(icon: string, name: string, desc: string, o: { cost?: Cost | null; state?: SheetState; lockText?: string; extra?: string; sub?: string; okText?: string } = {}): void {
+  show(icon: string, name: string, desc: string, o: { cost?: Cost | null; state?: SheetState; lockText?: string; extra?: string; sub?: string; okText?: string; chips?: string } = {}): void {
     const iconHtml = icon.startsWith('<') ? icon : img(icon, '');
-    const own = `<small class="own">보유 매출 ${fmt(S.revenue)} · P ${fmt(S.point)}</small>`;
+    const own = '';
     let right = o.extra || '';
     const st = o.state || (o.cost ? 'buy' : 'none');
     if (st === 'max') right = `<span class="pz max"><span class="mxl">${img('ic.max', 'mxi')}최대</span>${own}</span>`;
@@ -23,13 +26,10 @@ export class Sheet {
     else if (st === 'lock') right = `<span class="pz gray"><span class="grp">${img('ic.lock')}<small class="hl">${o.lockText || '잠김'}</small></span>${own}</span>`;
     else if (st === 'buy' && o.cost) {
       const c = o.cost;
-      const ok = S.revenue >= c.rev && S.point >= c.point;
-      const lr = Math.max(0, c.rev - S.revenue);
-      const lp = Math.max(0, c.point - S.point);
-      const lack = [lr ? `매출 ${fmt(lr)} 부족` : '', lp ? `P ${fmt(lp)} 부족` : ''].filter(Boolean).join(' · ');
-      right = `<span class="pz ${ok ? 'ok' : 'no'}"><span class="grp">${costTxt(c)}</span><small class="hl">${ok ? `${img('ic.doubleTap')} ${o.okText || '두 번 누르면 구매!'}` : lack}</small>${own}</span>`;
+      const ok = payable(c);
+      right = `<span class="pz ${ok ? 'ok' : 'no'}"><span class="grp">${costTxt(c)}</span><small class="hl">${ok ? `${img('ic.doubleTap')} ${o.okText || '두 번 누르면 구매!'}` : `${lackOf(c)} 부족`}</small>${own}</span>`;
     }
-    this.el.innerHTML = `<div class="sic">${iconHtml}</div><div class="t"><div class="nm">${name}${o.sub ? `<small>${o.sub}</small>` : ''}</div><div class="ds">${desc}</div></div>${right}`;
+    this.el.innerHTML = `<div class="sic">${iconHtml}</div><div class="t"><div class="nm">${name}${o.chips || ''}${o.sub ? `<small>${o.sub}</small>` : ''}</div><div class="ds">${desc}</div></div>${right}`;
     this.el.classList.add('show');
   }
   hide(): void {
@@ -49,7 +49,11 @@ export class Sheet {
   }
 }
 
+/** 가격: 매출 = 동전 아이콘, 기술력 = 톱니 아이콘(둘 다 있으면 둘 다) */
 export function costTxt(c: Cost): string {
   /* 아이콘과 숫자가 줄바꿈으로 갈라지지 않게 묶음 */
-  return `<span class="nw">${img('ic.revenue')}${fmt(c.rev)}</span>${c.point ? ` <span class="nw">${img('ic.point')}${fmt(c.point)}</span>` : ''}`;
+  const parts: string[] = [];
+  if (c.rev || !c.tech) parts.push(`<span class="nw">${img('ic.revenue')}${fmt(c.rev)}</span>`);
+  if (c.tech) parts.push(`<span class="nw">${img('ic.tech')}${fmt(c.tech)}</span>`);
+  return parts.join(' ');
 }

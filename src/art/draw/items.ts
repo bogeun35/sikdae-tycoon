@@ -2,7 +2,7 @@
  * 영업 아이템 20종 (96×96). 파스텔 채움 + 짙은 동계열 외곽선, 부드러운 그라데이션, 흰 광택.
  */
 import type { Body } from '../render';
-import { C, E, G, P, PL, R, Svg, darken, edge, face, lighten, n2, sparkle, starPath, pPath, ticketPath } from '../kit';
+import { C, E, G, P, PL, R, Svg, darken, edge, face, lighten, n2, sparkle, starPath, ticketPath, gearPath } from '../kit';
 
 const SW = 3;
 
@@ -129,7 +129,8 @@ const it09: Draw = (sv) => {
   return (
     R(10, 22, 76, 52, 8, { fill: sv.lin([[0, lighten(c, 0.35)], [1, c]], 0, 0, 1, 1), stroke: edge(c), sw: SW }) +
     R(10, 32, 76, 8, 0, { fill: edge(c), op: 0.35 }) +
-    C(62, 56, 14, { fill: '#6fd3f7', stroke: '#fff', sw: 3 }) + G(P(pPath(7.5), { fill: 'none', stroke: '#fff', sw: 3.8 }), { tf: 'translate(62 56)' }) +
+    /* 기술 문서: 기술력 톱니(옛 P 동전 자리) */
+    C(62, 56, 16, { fill: '#fff', op: 0.55 }) + P(gearPath(62, 56, 15), { fill: '#4aa3df', stroke: '#fff', sw: 2.6, lj: 'round' }) + C(62, 56, 5, { fill: '#fff', stroke: '#2b6f9e', sw: 1.6 }) +
     R(18, 50, 22, 4, 2, { fill: '#fff', op: 0.8 }) + R(18, 58, 14, 4, 2, { fill: '#fff', op: 0.6 }) +
     shine(26, 28, 9, 3, -6)
   );

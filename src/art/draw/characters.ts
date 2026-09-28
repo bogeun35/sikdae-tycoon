@@ -3,7 +3,7 @@
  * 원작 고양이 선장 초상처럼 동그란 틀 안의 상반신. 정장 + 사원증·명함 등 소품. cheer = 두 팔 번쩍 + 활짝 입 + 반짝 2개.
  */
 import type { Body } from '../render';
-import { C, E, G, P, PL, R, Svg, darken, edge, face, lighten, mix, n2, sparkle, pPath, heartPath, INK, type Mood } from '../kit';
+import { C, E, G, P, PL, R, Svg, darken, edge, face, lighten, mix, n2, sparkle, heartPath, gearPath, INK, type Mood } from '../kit';
 
 interface Look {
   fur: string;
@@ -211,12 +211,12 @@ const squirrel: Draw = (c) => {
   s += E(HX, HY + 28, 16, 12, { fill: lighten(f, 0.62) });
   s += face(HX, HY, 3.5, mood(c), { gap: 1.1 });
   s += nose(HY + 18, 7, '#6a3a2a');
-  // 도토리 모자 + P 코인
+  // 도토리 모자 + 기술력 톱니(옛 P 코인 자리)
   const gold = '#ffd36b';
   s += P(`M${HX - 50} ${HY - 34}Q${HX - 48} ${HY - 80} ${HX} ${HY - 82}Q${HX + 48} ${HY - 80} ${HX + 50} ${HY - 34}Z`, { fill: c.sv.lin([[0, '#fff0b0'], [1, gold]]), stroke: edge(gold), sw: 4 });
   for (let i = 0; i < 5; i++) s += P(`M${HX - 40 + i * 20} ${HY - 38}l8 -12l8 12`, { fill: 'none', stroke: darken(gold, 0.8), sw: 2, so: 0.7 });
   s += P(`M${HX} ${HY - 82}q2 -10 10 -12`, { fill: 'none', stroke: '#8a5a3a', sw: 5 });
-  s += C(HX, HY - 58, 13, { fill: gold, stroke: edge(gold), sw: 3 }) + G(P(pPath(7), { fill: 'none', stroke: '#fff', sw: 3.4 }), { tf: `translate(${HX} ${HY - 58})` });
+  s += P(gearPath(HX, HY - 58, 15), { fill: '#6fbfee', stroke: edge('#4aa3df'), sw: 3, lj: 'round' }) + C(HX, HY - 58, 5.5, { fill: '#fff', stroke: edge('#4aa3df'), sw: 2 });
   if (!c.cheer) s += hand(c, 96, 238) + card(96, 222, -12);
   return s;
 };

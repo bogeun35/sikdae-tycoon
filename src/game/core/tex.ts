@@ -93,3 +93,13 @@ export function circle(): Texture {
   });
   return circleTex;
 }
+
+/**
+ * tint 를 바뀔 때만 씀(설계서 7장 11): Pixi 의 tint 세터는 같은 값이어도 부를 때마다 색 변환 배열을 새로 만들어
+ * 매 프레임 대상·게이지마다 부르면 GC 가 늘어난다. localColor(BGR)와 견줘 같으면 건너뜀
+ */
+export function setTint(o: { tint: number | string; localColor?: number }, rgb: number): void {
+  const bgr = ((rgb & 0xff) << 16) | (rgb & 0xff00) | ((rgb >> 16) & 0xff);
+  if (o.localColor === bgr) return;
+  o.tint = rgb;
+}

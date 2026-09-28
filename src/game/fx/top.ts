@@ -3,16 +3,19 @@
  * 색종이·폭죽, 화면 전환 와이프(식권 티켓 모양 구멍).
  * 좌표 = fxTop 논리 좌표(FXL.root, world 와 같은 배율). 화면 좌표가 필요한 것은 FXL.screen.
  */
-import { Container, Graphics, NineSliceSprite, Sprite, Text, type Texture } from 'pixi.js';
+import { BitmapText, Container, Graphics, NineSliceSprite, RenderTexture, Sprite, Text, type Texture } from 'pixi.js';
+import { LV_BASE, LV_FONT } from '../core/fonts';
 import gsap from 'gsap';
 import { FONT_STACK } from '../../fonts';
-import { FXL, markFx, view } from '../core/stage';
+import { FXL, fxApp, markFx, view } from '../core/stage';
 import { T } from '../core/tex';
+import { detachCached, releaseText, takeText } from '../core/textcache';
 import { FX } from '../data';
 import { sfx } from '../deps';
 import { Particles } from './particles';
+import { breath } from '../map/today';
 
-export type HudId = 'hud.gmv' | 'hud.revenue' | 'hud.point' | 'hud.level' | 'hud.sales' | 'hud.tech' | 'hud.net' | 'hud.pending';
+export type HudId = 'hud.gmv' | 'hud.revenue' | 'hud.tech' | 'hud.level' | 'hud.net' | 'hud.pending';
 let anchorFn: (id: HudId) => { x: number; y: number } | null = () => null;
 let arriveFn: (id: HudId) => void = () => {};
 export function setHudResolver(fn: typeof anchorFn, onArrive: typeof arriveFn): void {
@@ -44,7 +47,11 @@ export function initTop(): void {
 interface Fly { sp: Sprite; x0: number; y0: number; cx: number; cy: number; t: number; dur: number; id: HudId; s0: number; delay: number; x1: number; y1: number }
 const flies: Fly[] = [];
 const flyPool: Sprite[] = [];
-const MAX_FLY: number = FX.coinFly.maxInFlight;
+let MAX_FLY: number = FX.coinFly.maxInFlight;
+/** 화질 등급 예산(날아가는 코인 동시 개수) */
+export function setFlyBudget(n: number): void {
+  MAX_FLY = Math.max(4, Math.min(FX.coinFly.maxInFlight, n));
+}
 let arriveCombo = 0;
 let arriveAt = 0;
 export function flyCoin(key: string, from: { x: number; y: number }, to: HudId, delay = 0, scale = 1): boolean {
@@ -166,18 +173,82 @@ let bannerShift = 0;
 export function setBannerShift(v: number): void {
   bannerShift = v;
 }
+/** 배너가 가리면 안 되는 세로 띠(fxTop 논리 좌표): 그 배너를 부른 계약의 도장·금액 자리. at = 만든 시각(ms) */
+export interface BannerClear { y0: number; y1: number; at?: number }
 interface BannerReq { label: string; sub?: string; sub2?: string; count: number; hold?: number }
+/** 배너 띠의 위·아래 끝(배너 가운데 기준, 글로우 빼고 · 튀기 여유 포함) */
+const bandOf = (sub?: string, sub2?: string) => ({ top: -90, bot: sub2 ? 205 : sub ? 145 : 90 });
+/** 최근 큰 계약들의 도장·금액 띠(1.6초 동안 유효). 떠 있는 배너·새 배너 모두 이 띠들을 피한다 */
+const CLEAR_SEC = 1.6;
+const clears: BannerClear[] = [];
+function liveClears(): BannerClear[] {
+  const now = performance.now();
+  for (let i = clears.length - 1; i >= 0; i--) if (now - (clears[i].at || 0) > CLEAR_SEC * 1000) clears.splice(i, 1);
+  return clears;
+}
+/**
+ * 배너 높이: 기본은 화면 위쪽(가로 26% · 세로 22%). 최근 큰 계약의 도장·금액 띠(clears)가 그 자리에 들어가면
+ * 가운데 아래(가로 62%·74%·48% · 세로 56%·70%·42%) 중 안 겹치는 곳으로 내린다(폰에서 지도 위쪽 대기업을 계약하면 도장·금액이 배너에 가려짐).
+ * 다 겹치면 가장 덜 겹치는 곳.
+ */
+function bannerY(sub?: string, sub2?: string): number {
+  const land = view.orient === 'land';
+  const base = view.LH * ((land ? 0.26 : 0.22) + bannerShift);
+  const cl = liveClears();
+  if (!cl.length) return base;
+  const b = bandOf(sub, sub2);
+  const gap = (yy: number) => Math.min(...cl.map((c) => Math.max(c.y0 - (yy + b.bot), yy + b.top - c.y1)));
+  if (gap(base) >= 0) return base;
+  const cands = (land ? [0.62, 0.74, 0.48] : [0.56, 0.7, 0.42]).map((f) => view.LH * f).filter((yy) => yy + b.bot <= view.LH - 20);
+  let best = base;
+  let bg = gap(base);
+  for (const yy of cands) {
+    const g = gap(yy);
+    if (g >= 0) return yy;
+    if (g > bg) {
+      bg = g;
+      best = yy;
+    }
+  }
+  return best;
+}
 const queue: BannerReq[] = [];
 /** 영업 시작 알약 등으로 잠깐 쉬는 시간(초) */
 let bannerHold = 0;
 /** 화면에 떠 있는 배너는 늘 한 장. age = 보인 시간(초), leaving = 다음 배너에 자리를 비키는 중 */
-let curBanner: { base: string; count: number; txt: Text; c: Container; out: gsap.core.Tween; y0: number; age: number; leaving: boolean; minShow: number } | null = null;
+let curBanner: { base: string; count: number; txt: Text; c: Container; out: gsap.core.Tween; y0: number; age: number; leaving: boolean; minShow: number; sub?: string; sub2?: string; outAt: number } | null = null;
 /** 배너가 사라지는 트윈(합쳐지면 다시 걸어 끝까지 보이게) */
 function bannerOut(c: Container, y0: number, delay: number, dur = 0.35): gsap.core.Tween {
-  return gsap.to(c, { alpha: 0, y: y0 - 40, duration: dur, delay, ease: 'power2.in', onComplete: () => { gsap.killTweensOf(c.scale); c.destroy({ children: true }); } });
+  return gsap.to(c, { alpha: 0, y: y0 - 40, duration: dur, delay, ease: 'power2.in', onComplete: () => { gsap.killTweensOf(c.scale); detachCached(c); c.destroy({ children: true }); } });
 }
+/* 배너·컷 글자 모양(글자는 textcache 로 돌려 씀 — 같은 배너가 다시 뜰 때 캔버스에 새로 그리지 않음, 설계서 7장 6) */
+const BN_T = { fontFamily: FONT_STACK, fontSize: 64, fill: '#ffffff', stroke: { color: '#8a5a1a', width: 10, join: 'round' as const }, dropShadow: { color: '#5c3a1a', alpha: 0.5, distance: 5, blur: 0, angle: Math.PI / 2 } };
+const BN_S = { fontFamily: FONT_STACK, fontSize: 40, fill: '#fff8ec', stroke: { color: '#4a2f12', width: 8, join: 'round' as const } };
+const BN_S2 = { fontFamily: FONT_STACK, fontSize: 56, fill: '#ffe066', stroke: { color: '#4a2f12', width: 11, join: 'round' as const } };
+const RAY_N = (cp: boolean) => ({ fontFamily: FONT_STACK, fontSize: cp ? 44 : 60, fill: '#ffffff', stroke: { color: '#5c3a1a', width: 9, join: 'round' as const }, dropShadow: { color: '#5c3a1a', distance: 4, blur: 0, alpha: 0.6, angle: Math.PI / 2 } });
+const RAY_S = (cp: boolean) => ({ fontFamily: FONT_STACK, fontSize: cp ? 30 : 38, fill: '#fff4c4', stroke: { color: '#5c3a1a', width: 7, join: 'round' as const } });
 const bannerTitle = (label: string, n: number) => (n > 1 ? `${label} ×${n}` : label);
-export function banner(label: string, sub?: string, sub2?: string, now = false): void {
+/** 떠 있는 배너가 새로 생긴 도장·금액 띠를 덮으면 비킬 자리로 옮김(사라지는 트윈도 새 자리 기준으로 다시) */
+function dodgeCurrent(): void {
+  const cb = curBanner;
+  if (!cb || cb.c.destroyed || cb.leaving) return;
+  const y = bannerY(cb.sub, cb.sub2);
+  if (Math.abs(y - cb.y0) < 1) return;
+  /* 미끄러져 가면 가는 길에 도장·금액 위를 지나가므로 바로 옮기고 살짝 튀김 */
+  cb.y0 = y;
+  cb.out.kill();
+  gsap.killTweensOf(cb.c);
+  cb.c.y = y;
+  cb.c.alpha = 1;
+  gsap.fromTo(cb.c.scale, { x: 1.08, y: 1.08 }, { x: 1, y: 1, duration: 0.2, ease: 'back.out(3)' });
+  cb.out = bannerOut(cb.c, y, Math.max(0.2, cb.outAt - cb.age));
+}
+export function banner(label: string, sub?: string, sub2?: string, now = false, clear?: BannerClear | BannerClear[]): void {
+  if (clear) {
+    const at = performance.now();
+    for (const c of Array.isArray(clear) ? clear : [clear]) clears.push({ ...c, at: c.at ?? at });
+    if (!now) dodgeCurrent();
+  }
   if (now) {
     /* 절정(보스 계약): 줄 선 배너는 버리고, 떠 있는 배너는 곧바로 치운 뒤 이 배너를 바로 띄움 */
     queue.length = 0;
@@ -196,17 +267,28 @@ export function banner(label: string, sub?: string, sub2?: string, now = false):
   const cb = curBanner;
   if (cb && cb.base === label && !cb.c.destroyed && !(cb.leaving && queue.length > 0)) {
     cb.count++;
-    cb.txt.text = bannerTitle(label, cb.count);
+    {
+      /* ×N 글자는 캐시 글자로 갈아 끼움(떠 있는 글자를 다시 그리지 않음) */
+      const old = cb.txt;
+      const nt = takeText('bn-t', bannerTitle(label, cb.count), BN_T);
+      nt.anchor.set(0.5, 0.55);
+      const at = old.parent === cb.c ? cb.c.getChildIndex(old) : cb.c.children.length;
+      cb.c.addChildAt(nt, at);
+      releaseText(old);
+      cb.txt = nt;
+    }
     gsap.fromTo(cb.c.scale, { x: 1.12, y: 1.12 }, { x: 1, y: 1, duration: 0.25, ease: 'back.out(3)' });
     if (queue.length === 0) {
-      /* 기다리는 배너가 없으면 되살려서 적어도 0.9초 더 보이게. 기다리는 배너가 있으면 숫자만 올리고 제때 비킴 */
+      /* 기다리는 배너가 없으면 되살려서 적어도 0.9초 더 보이게. 기다리는 배너가 있으면 숫자만 올리고 제때 비킴.
+         자리는 dodgeCurrent() 가 이미 옮겨 둠(y0) */
       cb.out.kill();
       gsap.killTweensOf(cb.c);
       cb.leaving = false;
       cb.c.alpha = 1;
       cb.c.y = cb.y0;
       cb.out = bannerOut(cb.c, cb.y0, 0.9);
-        cb.age = Math.min(cb.age, cb.minShow - 0.9);
+      cb.age = Math.min(cb.age, cb.minShow - 0.9);
+      cb.outAt = cb.age + 0.9;
     }
     return;
   }
@@ -233,39 +315,72 @@ function showBanner(b: BannerReq): void {
   ns.width = w;
   ns.height = 150;
   ns.pivot.set(w / 2, 75);
-  const txt = new Text({ text: bannerTitle(b.label, b.count), style: { fontFamily: FONT_STACK, fontSize: 64, fill: '#ffffff', stroke: { color: '#8a5a1a', width: 10, join: 'round' }, dropShadow: { color: '#5c3a1a', alpha: 0.5, distance: 5, blur: 0, angle: Math.PI / 2 } } });
+  const txt = takeText('bn-t', bannerTitle(b.label, b.count), BN_T);
   txt.anchor.set(0.5, 0.55);
   c.addChild(ns, txt);
   if (b.sub) {
-    const s = new Text({ text: b.sub, style: { fontFamily: FONT_STACK, fontSize: 40, fill: '#fff8ec', stroke: { color: '#4a2f12', width: 8, join: 'round' } } });
+    /* 금액이 든 부제(첫 결제 연결 +N원 등)는 캐시하지 않음 — 대상 이름 부제만 다시 씀 */
+    const s = takeText('bn-s', b.sub, BN_S, !/[0-9]/.test(b.sub));
     s.anchor.set(0.5, 0);
     s.y = 86;
     c.addChild(s);
   }
   if (b.sub2) {
-    const s2 = new Text({ text: b.sub2, style: { fontFamily: FONT_STACK, fontSize: 56, fill: '#ffe066', stroke: { color: '#4a2f12', width: 11, join: 'round' } } });
+    const s2 = takeText('bn-s2', b.sub2, BN_S2, !/[0-9]/.test(b.sub2));
     s2.anchor.set(0.5, 0);
     s2.y = 132;
     c.addChild(s2);
   }
   const glow = new Sprite(T('fx.glow'));
+  glow.label = 'glow';
   glow.anchor.set(0.5);
   glow.blendMode = 'add';
   glow.width = w * 1.3;
   glow.height = 300;
   glow.alpha = 0.5;
   c.addChildAt(glow, 0);
-  c.position.set(view.LW / 2, view.LH * ((land ? 0.26 : 0.22) + bannerShift));
+  c.position.set(view.LW / 2, bannerY(b.sub, b.sub2));
   bannerLayer.addChild(c);
   c.scale.set(0.2, 0.2);
   c.alpha = 0;
   gsap.to(c, { alpha: 1, duration: 0.12 });
   gsap.to(c.scale, { x: 1, y: 1, duration: 0.45, ease: 'back.out(2.6)' });
   const minShow = Math.max(FX.bannerQueue.gapSec, b.hold || 0);
-  const out = bannerOut(c, c.y, Math.max(1.35, minShow - 0.2));
+  const outAt = Math.max(1.35, minShow - 0.2);
+  const out = bannerOut(c, c.y, outAt);
   sparks.burst(T('fx.star'), c.x, c.y, 14, { spMin: 200, spMax: 520, life: 0.9, g: 500, s0: 0.7, s1: 0.2, up: 120 });
-  curBanner = { base: b.label, count: b.count, txt, c, out, y0: c.y, age: 0, leaving: false, minShow };
+  curBanner = { base: b.label, count: b.count, txt, c, out, y0: c.y, age: 0, leaving: false, minShow, sub: b.sub, sub2: b.sub2, outAt };
   markFx();
+}
+/** 떠 있는 배너 자리(화면 CSS px, 글로우 빼고 띠·글자만). 영업 지도 숫자가 이 자리를 비킨다 */
+/**
+ * full = 비킬 자리 계산용: 막 뜨는 중(흐림·작게 시작해 튀는 중)이어도 다 커졌을 때(튀기 1.12배) 크기로 미리 알려 줌 — 알약·숫자가 한 프레임 늦게 비키다 배너 밑에 깔리지 않게.
+ * 사라지는 중인 배너는 full 이어도 빼지 않음(흐려질 때까지는 보이므로).
+ */
+export function bannerRects(full = false): { x0: number; y0: number; x1: number; y1: number }[] {
+  const cb = curBanner;
+  if (!cb || cb.c.destroyed || (!full && cb.c.alpha < 0.3) || (full && cb.leaving && cb.c.alpha < 0.3)) return [];
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const ch of cb.c.children) {
+    if (ch.label === 'glow') continue;
+    const b = ch.getBounds();
+    x0 = Math.min(x0, b.minX);
+    y0 = Math.min(y0, b.minY);
+    x1 = Math.max(x1, b.maxX);
+    y1 = Math.max(y1, b.maxY);
+  }
+  if (!(x1 > x0)) return [];
+  if (full) {
+    const s = Math.max(0.05, cb.c.scale.x);
+    const k = Math.max(1, 1.12 / s);
+    /* 배너는 제 원점(가운데)을 중심으로 커지므로 그 점을 기준으로 늘림 */
+    const o = cb.c.getGlobalPosition();
+    return [{ x0: o.x + (x0 - o.x) * k, x1: o.x + (x1 - o.x) * k, y0: o.y + (y0 - o.y) * k, y1: o.y + (y1 - o.y) * k }];
+  }
+  return [{ x0, y0, x1, y1 }];
 }
 /**
  * 배너는 한 번에 한 장. 다음 배너가 줄 서 있으면 지금 배너를 gapSec(1.2초) 보인 뒤 빠르게 치우고,
@@ -310,12 +425,12 @@ export function rayCut(texKey: string, name: string, opts: { sub?: string; sec?:
   const sz = opts.size || 220;
   const r = sz / Math.max(ic.texture.width, ic.texture.height);
   ic.scale.set(r);
-  const nm = new Text({ text: name, style: { fontFamily: FONT_STACK, fontSize: cp ? 44 : 60, fill: '#ffffff', stroke: { color: '#5c3a1a', width: 9, join: 'round' }, dropShadow: { color: '#5c3a1a', distance: 4, blur: 0, alpha: 0.6, angle: Math.PI / 2 } } });
+  const nm = takeText(cp ? 'ray-n-c' : 'ray-n', name, RAY_N(cp));
   nm.anchor.set(0.5, 0);
   nm.y = sz * 0.62;
   c.addChild(rays, glow, ic, nm);
   if (opts.sub) {
-    const s = new Text({ text: opts.sub, style: { fontFamily: FONT_STACK, fontSize: cp ? 30 : 38, fill: '#fff4c4', stroke: { color: '#5c3a1a', width: 7, join: 'round' } } });
+    const s = takeText(cp ? 'ray-s-c' : 'ray-s', opts.sub, RAY_S(cp));
     s.anchor.set(0.5, 0);
     s.y = sz * 0.62 + (cp ? 56 : 76);
     c.addChild(s);
@@ -327,31 +442,81 @@ export function rayCut(texKey: string, name: string, opts: { sub?: string; sec?:
   gsap.to(c.scale, { x: 1, y: 1, duration: 0.5, ease: 'back.out(2.2)' });
   gsap.to(rays, { rotation: Math.PI * 2 * (sec / 8), duration: sec, ease: 'none' });
   gsap.to(ic, { rotation: 0.12, duration: 0.3, yoyo: true, repeat: 5, ease: 'sine.inOut' });
-  gsap.to(c, { alpha: 0, duration: 0.3, delay: sec - 0.3, onComplete: () => c.destroy({ children: true }) });
+  gsap.to(c, { alpha: 0, duration: 0.3, delay: sec - 0.3, onComplete: () => { detachCached(c); c.destroy({ children: true }); } });
   sparks.burst(T('fx.spark'), c.x, c.y, 18, { spMin: 180, spMax: 480, life: 0.9, s0: 1, s1: 0.2, up: 0, blend: 'add' });
   markFx();
 }
 
 /** 떠 있는 LEVEL UP 글자(연달아 오르면 새로 띄우지 않고 숫자만 올림) */
-let lvCur: { t: Text; tl: gsap.core.Timeline } | null = null;
+let lvCur: { t: BitmapText; tl: gsap.core.Timeline } | null = null;
+/** 미리 만든 다음 LEVEL UP 글자 */
+let lvPrep: { lv: number; land: boolean; t: BitmapText } | null = null;
+/** 글자 그림 한 벌(sk-lv, core/fonts.ts)로 — 같은 모양(금색·갈색 테·아래 그림자), 숫자가 바뀌어도 캔버스에 다시 그리지 않음 */
+function lvText(lv: number, land: boolean): BitmapText {
+  return new BitmapText({ text: `LEVEL UP! ${lv}`, style: { fontFamily: LV_FONT, fontSize: land ? LV_BASE : 92 } });
+}
+/**
+ * 영업 시작 전(와이프가 덮은 동안) fxTop 글자 미리 만들기(설계서 7장): 배너 제목 · 대상 이름 줄 · 다음 LEVEL UP.
+ * 글자를 캔버스에 그리고 GPU 에 올리는 일이 첫 배너 프레임에 몰려 긴 작업(폰 4배 느림 100~200ms)이 되던 것
+ */
+export async function warmTop(subs: string[], nextLv: number): Promise<void> {
+  const r = fxApp.renderer;
+  const rt = RenderTexture.create({ width: 8, height: 8 });
+  const box = new Container();
+  const land = view.orient === 'land';
+  const titles = ['대형 계약', '전국 계약', FX.firstSeen.label, FX.pendingRelease.banner, (FX.eventText.boss as unknown as [string])[0]];
+  const list: Container[] = [...titles.map((t) => takeText('bn-t', t, BN_T)), ...subs.map((s) => takeText('bn-s', s, BN_S))];
+  if (!lvPrep || lvPrep.lv !== nextLv || lvPrep.land !== land || lvPrep.t.destroyed) {
+    lvPrep?.t.destroy();
+    lvPrep = { lv: nextLv, land, t: lvText(nextLv, land) };
+  }
+  list.push(lvPrep.t);
+  try {
+    for (let i = 0; i < list.length; i += 3) {
+      for (const o of list.slice(i, i + 3)) box.addChild(o);
+      try {
+        r.render({ container: box, target: rt, clear: true });
+      } catch {
+        /* 무시 */
+      }
+      box.removeChildren();
+      await breath();
+    }
+  } finally {
+    box.destroy();
+    rt.destroy(true);
+  }
+}
 /** 절정(보스 계약) 동안은 LEVEL UP 글자를 미뤘다가 끝나면 띄움(전국 계약 배너·도장과 한 화면에 겹치지 않게) */
 let climaxLeft = 0;
 let lvPending = 0;
+/** 대형 계약 배너 동안 LEVEL UP 을 미루는 시간. 계약이 연달아 와도 lvHoldMax 초 넘게는 안 미룸 */
+let lvHold = 0;
+let lvHoldTotal = 0;
+const LV_HOLD_MAX = 2.5;
 export function climax(sec: number): void {
   climaxLeft = Math.max(climaxLeft, sec);
   if (lvCur && !lvCur.t.destroyed) lvCur.tl.progress(1);
 }
+export function holdLevelUp(sec: number): void {
+  if (lvHoldTotal > LV_HOLD_MAX) return;
+  lvHold = Math.max(lvHold, sec);
+  if (lvCur && !lvCur.t.destroyed) lvCur.tl.progress(1);
+}
 function updateClimax(dt: number): void {
-  if (climaxLeft <= 0) return;
-  climaxLeft -= dt;
-  if (climaxLeft <= 0 && lvPending) {
+  if (climaxLeft > 0) climaxLeft -= dt;
+  if (lvHold > 0) {
+    lvHold -= dt;
+    lvHoldTotal += dt;
+  } else lvHoldTotal = 0;
+  if (climaxLeft <= 0 && lvHold <= 0 && lvPending) {
     const lv = lvPending;
     lvPending = 0;
     levelUpCut(lv);
   }
 }
 export function levelUpCut(lv: number): void {
-  if (climaxLeft > 0) {
+  if (climaxLeft > 0 || lvHold > 0) {
     lvPending = Math.max(lvPending, lv);
     return;
   }
@@ -364,10 +529,10 @@ export function levelUpCut(lv: number): void {
     return;
   }
   void now;
-  const t = new Text({
-    text: `LEVEL UP! ${lv}`,
-    style: { fontFamily: FONT_STACK, fontSize: land ? 96 : 92, fill: '#ffd36b', stroke: { color: '#8a5a1a', width: 10, join: 'round' }, dropShadow: { color: '#5c3a1a', distance: 7, blur: 0, alpha: 0.8, angle: Math.PI / 2 } },
-  });
+  /* 영업 시작 전에 만들어 둔 글자(warmTop)가 이 레벨이면 그대로 씀 — 첫 LEVEL UP 프레임에 큰 글자 텍스처를 만들지 않게 */
+  const pre = lvPrep && lvPrep.lv === lv && lvPrep.land === land && !lvPrep.t.destroyed ? lvPrep.t : null;
+  if (pre) lvPrep = null;
+  const t = pre || lvText(lv, land);
   t.anchor.set(0.5);
   /* 배너(화면 위 0.26)와 겹치지 않게 조금 아래. 보스 게이지가 떠서 배너가 내려와 있으면 더 아래 */
   const y0 = view.LH * ((land ? 0.56 : 0.5) + (bannerShift > 0 ? 0.08 : 0));
@@ -568,6 +733,17 @@ export function wiping(): boolean {
   return wipeK >= 0;
 }
 
+/**
+ * fxTop 에 그릴 것이 살아 있는지(설계서 7장 4): 코인·파티클·배너·컷·어둡게·와이프. 없으면 루프가 fxTop 을 그리지 않는다
+ * (사라진 뒤 markFx 로 두 번 더 그려 캔버스를 비움).
+ */
+export function topActive(): boolean {
+  if (flies.length || conf.count || sparks.count || wipeK >= 0 || dimG.alpha > 0) return true;
+  if (bannerLayer.children.length) return true;
+  const n = cutLayer.children.length;
+  return n > 1 || (n === 1 && cutLayer.children[0] !== dimG);
+}
+
 export function updateTop(dt: number): void {
   confCool = Math.max(0, confCool - dt);
   updateFlies(dt);
@@ -586,8 +762,11 @@ export function dropQueuedBanners(): void {
 }
 export function clearTop(): void {
   queue.length = 0;
+  clears.length = 0;
   climaxLeft = 0;
   lvPending = 0;
+  lvHold = 0;
+  lvHoldTotal = 0;
   /* 사무실에서 줄 서 있던 새 상권 컷은 영업으로 가져가지 않음 */
   cutQueue.length = 0;
   if (tapToSkip) skipCut();

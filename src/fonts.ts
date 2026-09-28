@@ -9,6 +9,8 @@
  */
 import juaKorean from '@fontsource/jua/files/jua-korean-400-normal.woff2?inline';
 import juaLatin from '@fontsource/jua/files/jua-latin-400-normal.woff2?inline';
+/* 쉼표·마침표만 다시 그린 보정 글꼴(scripts/make-punct-font.mjs). Jua 원본은 1배 화면 작은 글씨에서 쉼표가 점처럼, 마침표가 쉼표처럼 보임 */
+import juaPunct from './assets/jua-punct.ttf?inline';
 
 export const GAME_FONT = 'Jua';
 /** 폰트가 늦거나 실패했을 때 대신 쓸 글꼴 */
@@ -26,6 +28,8 @@ export async function loadFonts(timeoutMs = 6000): Promise<boolean> {
       display: 'block',
       unicodeRange: LATIN_RANGE,
     }),
+    /* 맨 뒤에 넣어야 같은 글자(, .)에서 앞 두 파일보다 먼저 쓰인다 */
+    new FontFace(GAME_FONT, `url(${juaPunct}) format('truetype')`, { weight: '400', style: 'normal', display: 'block', unicodeRange: 'U+002C, U+002E' }),
   ];
   faces.forEach((f) => document.fonts.add(f));
   const timer = new Promise<'timeout'>((r) => setTimeout(() => r('timeout'), timeoutMs));

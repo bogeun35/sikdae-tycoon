@@ -2,7 +2,7 @@
  * 효과음 문지기 — 간격 제한(같은 이름 연타 버림) + 동시 발음 한도(14, important 는 무시) + 이름별 동시 한도.
  * 시각을 인자로 받으므로 실시간·측정(OfflineAudioContext) 모두 같은 규칙으로 돈다.
  */
-import { IMPORTANT, MAX_PER_NAME, MAX_VOICES, THROTTLE, type SfxName } from './names';
+import { IMPORTANT, MAX_PER_NAME, MAX_VOICES, MIN_GAP, THROTTLE, type SfxName } from './names';
 
 export type GateResult = 'ok' | 'throttle' | 'voices' | 'per-name';
 
@@ -13,7 +13,7 @@ export class Gate {
   readonly dropped: Record<Exclude<GateResult, 'ok'>, number> = { throttle: 0, voices: 0, 'per-name': 0 };
 
   check(name: SfxName, t: number, now: number): GateResult {
-    const thr = THROTTLE[name];
+    const thr = THROTTLE[name] ?? MIN_GAP;
     const l = this.last.get(name);
     if (thr && l != null && Math.abs(t - l) < thr) return this.drop('throttle');
     if (this.voices.length) this.voices = this.voices.filter((v) => v.end > now);

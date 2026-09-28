@@ -48,15 +48,28 @@ export interface GraphOptions {
   limiter?: boolean;
 }
 
-function makeNoise(c: BaseAudioContext): AudioBuffer {
+/*
+ * 잡음·잔향 임펄스 버퍼는 표본율마다 한 번만 만든다(설계서 7장 7). AudioBuffer 는 컨텍스트에 묶이지 않아
+ * 굽기용 OfflineAudioContext 여러 개가 같은 버퍼를 같이 쓸 수 있다 — 굽기마다 수만 개 난수·pow 를 새로 계산하던 것
+ */
+const noiseCache = new Map<number, AudioBuffer>();
+const impulseCache = new Map<string, AudioBuffer>();
+
+export function makeNoise(c: BaseAudioContext): AudioBuffer {
+  const hit = noiseCache.get(c.sampleRate);
+  if (hit) return hit;
   const len = Math.floor(c.sampleRate * 1.5);
   const buf = c.createBuffer(1, len, c.sampleRate);
   const d = buf.getChannelData(0);
   for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  noiseCache.set(c.sampleRate, buf);
   return buf;
 }
 
 function makeImpulse(c: BaseAudioContext, secs: number, curve: number): AudioBuffer {
+  const key = `${c.sampleRate}|${secs}|${curve}`;
+  const hit = impulseCache.get(key);
+  if (hit) return hit;
   const len = Math.floor(c.sampleRate * secs);
   const buf = c.createBuffer(2, len, c.sampleRate);
   for (let ch = 0; ch < 2; ch++) {
@@ -66,6 +79,7 @@ function makeImpulse(c: BaseAudioContext, secs: number, curve: number): AudioBuf
       d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, curve) * (i < 220 ? i / 220 : 1);
     }
   }
+  impulseCache.set(key, buf);
   return buf;
 }
 
@@ -82,7 +96,7 @@ function softClipCurve(n = 4096): Float32Array<ArrayBuffer> {
   return k;
 }
 
-function makeReverb(c: BaseAudioContext, out: AudioNode, wet: number): GainNode {
+export function makeReverb(c: BaseAudioContext, out: AudioNode, wet: number): GainNode {
   const input = c.createGain();
   const conv = c.createConvolver();
   conv.buffer = makeImpulse(c, 0.7, 2.2);
@@ -94,7 +108,7 @@ function makeReverb(c: BaseAudioContext, out: AudioNode, wet: number): GainNode 
   return input;
 }
 
-function makeEcho(c: BaseAudioContext, out: AudioNode, wet: number): GainNode {
+export function makeEcho(c: BaseAudioContext, out: AudioNode, wet: number): GainNode {
   const input = c.createGain();
   const dly = c.createDelay(1);
   dly.delayTime.value = 0.22;

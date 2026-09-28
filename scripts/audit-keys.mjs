@@ -83,7 +83,8 @@ for (const d of D.districts) {
   for (const o of ['land', 'port']) want(`m.${d.id}.ground@${o}`, 'maps ground');
   for (const o of ['land', 'port']) want(`m.${d.id}.roads@${o}`, 'maps roads');
 }
-for (const [did, byO] of Object.entries(D.maps)) for (const [o, m] of Object.entries(byO)) for (const dc of m.decor) want(dc.svgId, `maps.${did}.${o}.decor`);
+/* 옛 고정 지도(gdd-data.json maps)가 남아 있으면 그 장식도. 생성 지도(src/game/map/gen.ts) 장식 key 는 본체 글자·템플릿 대조로 잡힘 */
+for (const [did, byO] of Object.entries(D.maps || {})) for (const [o, m] of Object.entries(byO)) for (const dc of m.decor) want(dc.svgId, `maps.${did}.${o}.decor`);
 for (let i = 1; i <= 5; i++) want(`o.gift@${i}`, 'gift tiers 1..5');
 for (let i = 0; i < 4; i++) for (const ax of ['h', 'v']) want(`a.car${i}@${ax}`, 'cars × h/v');
 for (let i = 0; i < 4; i++) for (const f of ['a', 'b']) want(`a.walker${i}@${f}`, 'walkers × a/b');

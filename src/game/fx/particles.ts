@@ -2,6 +2,7 @@
  * 파티클 — 스프라이트 풀(매 프레임 new 없음). 예산을 넘으면 가장 오래된 것부터 지운다.
  */
 import { Container, Sprite, type Texture } from 'pixi.js';
+import { setTint } from '../core/tex';
 
 export interface POpts {
   x: number; y: number; vx?: number; vy?: number; g?: number; drag?: number; life?: number; rot?: number; vr?: number;
@@ -16,23 +17,31 @@ interface P {
 
 export class Particles {
   readonly view = new Container();
+  /** 블렌드별 층(보통 → add). 한 층 안에서는 블렌드가 같아 한 번에 그려짐 — 섞여 있으면 바뀔 때마다 그리기가 끊김(설계서 7장 6) */
+  private nC = new Container();
+  private aC = new Container();
   private live: P[] = [];
   private free: Sprite[] = [];
-  constructor(public budget = 600) {}
+  constructor(public budget = 600) {
+    this.view.addChild(this.nC, this.aC);
+  }
 
   emit(tex: Texture, o: POpts): void {
-    if (this.live.length >= this.budget) {
+    while (this.live.length >= this.budget && this.live.length) {
       const old = this.live.shift()!;
       old.sp.visible = false;
       this.free.push(old.sp);
     }
+    if (this.budget <= 0) return;
     const sp = this.free.pop() || new Sprite();
-    if (!sp.parent) this.view.addChild(sp);
+    const add = o.blend === 'add';
+    const layer = add ? this.aC : this.nC;
+    if (sp.parent !== layer) layer.addChild(sp);
     sp.texture = tex;
     sp.anchor.set(0.5);
     sp.visible = (o.delay || 0) <= 0;
-    sp.tint = o.tint ?? 0xffffff;
-    sp.blendMode = o.blend === 'add' ? 'add' : 'normal';
+    setTint(sp, o.tint ?? 0xffffff);
+    sp.blendMode = add ? 'add' : 'normal';
     sp.rotation = o.rot || 0;
     const s0 = o.s0 ?? 1;
     sp.scale.set(s0);

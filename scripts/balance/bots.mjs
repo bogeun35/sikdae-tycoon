@@ -2,9 +2,11 @@
  * 점심 영업 플레이어 봇 3종 — 시뮬(sim.ts)과 실제 게임 대조(verify-real.cjs)가 같은 함수를 쓴다.
  * 이 파일의 함수는 바깥 변수를 쓰지 않는다(브라우저에 toString() 으로 넣어 그대로 돌리기 때문).
  *
- *   clumsy 서툰: 반경을 지도 위 무작위 지점으로 옮겨 다님(대상을 보지 않음)
+ *   clumsy 서툰(경제 v4 새 정의): 대상을 보고 가장 가까운 곳으로 가지만 판단이 느리고(0.45초) 이동도 느림(650px/초),
+ *              판단의 30%는 엉뚱한 지점(지도 위 무작위)으로 감 — 반경 60px 에서도 사람 초보처럼 조금은 번다
+ *   clumsyOld 옛 서툰: 반경을 지도 위 무작위 지점으로 옮겨 다님(대상을 보지 않음). 비교용
  *   normal 보통: 가장 가까운 대상을 쫓음
- *   good   잘함: 가치 ÷ (가는 시간 + 설득 시간)이 가장 큰 대상을 쫓고, 가까운 선물 상자·문의·아이템은 먼저 주움
+ *   good   잘함: 가치 ÷ (가는 시간 + 설득 시간)이 가장 큰 대상을 쫓고, 가까운 선물 상자·문의·아이템은 먼저 주움. 최종 보스가 나오면 보스에 붙음
  *               (스킬은 게임에서 자동 발동 — 잘함 봇은 사무실에서 스킬 칸을 올린다. sim.ts 참고)
  *
  * L = 점심 로직(Lunch) 또는 같은 모양의 객체: ents, net, area, map.topLimit, chests, inquiries, items, cN, rN, P, R
@@ -14,12 +16,36 @@
 
 export const BOT_SPEC = {
   /** 반경 이동 속도(지도 px/초, 가로 지도 1920×1080 기준) · 판단 간격(초) */
-  clumsy: { speed: 650, think: 0.25 },
+  clumsy: { speed: 650, think: 0.45 },
+  clumsyOld: { speed: 650, think: 0.25 },
   normal: { speed: 1200, think: 0.15 },
   good: { speed: 1700, think: 0.1 },
 };
 
 export function decideClumsy(L, mem, rnd) {
+  const a = L.area;
+  const top = Math.max(a.y0, L.map.topLimit);
+  const n = L.net;
+  if (rnd() < 0.3) {
+    mem.goal = { x: a.x0 + rnd() * (a.x1 - a.x0), y: top + rnd() * (a.y1 - top) };
+    return mem.goal;
+  }
+  let best = null;
+  let bd = 1e18;
+  for (const e of L.ents) {
+    if (e.grace > 0) continue;
+    const d = Math.hypot(e.x - n.x, e.y - n.y);
+    if (d < bd) {
+      bd = d;
+      best = e;
+    }
+  }
+  if (!best) return mem.goal || { x: n.x, y: n.y };
+  mem.goal = { x: best.x, y: best.y - best.w * 0.2 };
+  return mem.goal;
+}
+
+export function decideClumsyOld(L, mem, rnd) {
   const a = L.area;
   const top = Math.max(a.y0, L.map.topLimit);
   const n = L.net;
@@ -70,6 +96,11 @@ export function decideGood(L, mem) {
     mem.goal = { x: pick.x, y: pick.y };
     return mem.goal;
   }
+  /* 최종 보스(트윈타워)가 나와 있으면 거기에 붙어 있음(잘하는 사람은 보스를 노림) */
+  for (const e of L.ents) if (e.boss && e.grace <= 0) {
+    mem.goal = { x: e.x, y: e.y - e.w * 0.2 };
+    return mem.goal;
+  }
   /* 모자란 쪽(기업/식당) 가중 — 매칭 배율 */
   const lack = L.cN > L.rN ? 'store' : L.rN > L.cN ? 'corp' : null;
   let best = null;
@@ -112,4 +143,4 @@ export function moveNet(L, goal, speed, dt) {
   n.y = Math.max(top, Math.min(a.y1, y));
 }
 
-export const DECIDE = { clumsy: decideClumsy, normal: decideNormal, good: decideGood };
+export const DECIDE = { clumsy: decideClumsy, clumsyOld: decideClumsyOld, normal: decideNormal, good: decideGood };

@@ -16,7 +16,11 @@ scripts/shot-web.js
 scripts/release.js
 scripts/play-final.js
 scripts/check-html.mjs
+scripts/perf-web.js
 scripts/balance/verify-real.cjs
 src/audio/dev/measure.cjs
 BUILD.md
 BALANCE.md
+
+# 동시 작업 락(빌드·헤드리스 크롬)
+.work.lock

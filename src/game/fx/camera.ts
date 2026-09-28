@@ -2,12 +2,27 @@
  * 영업 지도 카메라 연출: 흔들림(더하지 않고 큰 값으로 덮음, 초당 40px 감쇠) · 화면 번쩍(#fff0b4, 초당 2 감쇠) ·
  * 줌(대상 쪽으로 살짝) · 비네트(남은 5초 빨강·보스 어둡게) · 테두리 빛(러시·피버) · 쇼크웨이브 필터(동시 데스크톱 3 · 폰 1).
  */
-import { Container, Graphics, Rectangle, Sprite } from 'pixi.js';
+import { Container, Graphics, Rectangle, Sprite, type Texture } from 'pixi.js';
 import { ShockwaveFilter } from 'pixi-filters';
 import gsap from 'gsap';
 import { L, view } from '../core/stage';
 import { T, gradientTex } from '../core/tex';
 import { FX } from '../data';
+
+/** 테두리 빛 텍스처(한 장을 영업일마다 같이 씀 — 영업일마다 새로 만들고 안 지우면 GPU 텍스처가 하루 1장씩 늘었음) */
+let borderT: Texture | null = null;
+function borderTex(): Texture {
+  if (borderT && !borderT.destroyed) return borderT;
+  borderT = gradientTex(256, 256, (g, w, h) => {
+    const gr = g.createRadialGradient(w / 2, h / 2, w * 0.3, w / 2, h / 2, w * 0.72);
+    gr.addColorStop(0, 'rgba(255,255,255,0)');
+    gr.addColorStop(0.55, 'rgba(255,255,255,0.18)');
+    gr.addColorStop(1, 'rgba(255,255,255,1)');
+    g.fillStyle = gr;
+    g.fillRect(0, 0, w, h);
+  });
+  return borderT;
+}
 
 export class Camera {
   readonly cam = new Container();
@@ -17,10 +32,13 @@ export class Camera {
   reduce = false;
   private zoomTo = { x: 0, y: 0 };
   private flashG = new Graphics();
+  private flashOn = false;
   readonly vignette: Sprite;
   readonly border: Sprite;
   private waves: { f: ShockwaveFilter; t: number; life: number }[] = [];
   maxWaves = 3;
+  /** 화질 등급 흔들림·번쩍 배율(저 = 0.6) */
+  shakeK = 1;
   vigAlpha = 0;
   vigTint = 0xff3b3b;
   borderAlpha = 0;
@@ -30,23 +48,14 @@ export class Camera {
     this.vignette = new Sprite(T('fx.vignette'));
     this.vignette.alpha = 0;
     /* 테두리 빛(러시·피버): 가운데 투명 → 가장자리 흰 빛. add 합성이라 흰 텍스처여야 tint 색이 난다 */
-    this.border = new Sprite(
-      gradientTex(256, 256, (g, w, h) => {
-        const gr = g.createRadialGradient(w / 2, h / 2, w * 0.3, w / 2, h / 2, w * 0.72);
-        gr.addColorStop(0, 'rgba(255,255,255,0)');
-        gr.addColorStop(0.55, 'rgba(255,255,255,0.18)');
-        gr.addColorStop(1, 'rgba(255,255,255,1)');
-        g.fillStyle = gr;
-        g.fillRect(0, 0, w, h);
-      }),
-    );
+    this.border = new Sprite(borderTex());
     this.border.alpha = 0;
     this.border.blendMode = 'add';
     L.screen.addChild(this.vignette, this.border, this.flashG);
   }
 
   addShake(a: number): void {
-    const v = this.reduce ? a * 0.3 : a;
+    const v = (this.reduce ? a * 0.3 : a) * this.shakeK;
     this.shake = Math.max(this.shake, v);
   }
   /** 번쩍 피로도: 연달아 번쩍일수록 약해진다(후반 계약이 몰려도 화면이 계속 하얗게 뜨지 않게) */
@@ -54,7 +63,7 @@ export class Camera {
   private flashCool = 0;
   addFlash(a: number): void {
     if (this.reduce || a <= 0) return;
-    const eff = a / (1 + this.flashHeat * 1.5);
+    const eff = (a * this.shakeK) / (1 + this.flashHeat * 1.5);
     this.flashHeat += 1;
     /* 0.35초 안에 다시 오면 더 센 번쩍만 받음 */
     if (this.flashCool > 0 && eff <= this.flash + 0.08) return;
@@ -109,16 +118,29 @@ export class Camera {
     this.cam.pivot.set(this.zoomTo.x, this.zoomTo.y);
     this.cam.position.set(this.zoomTo.x + sx, this.zoomTo.y + sy);
     this.cam.scale.set(z);
-    this.flashG.clear();
-    if (this.flash > 0.01) this.flashG.rect(0, 0, view.w, view.h).fill({ color: 0xfff0b4, alpha: Math.min(0.28, this.flash * 0.5) });
-    this.vignette.width = view.w;
-    this.vignette.height = view.h;
-    this.vignette.tint = this.vigTint;
-    this.vignette.alpha = this.vigAlpha;
-    this.border.width = view.w;
-    this.border.height = view.h;
-    this.border.tint = this.borderTint;
-    this.border.alpha = this.borderAlpha;
+    /* 번쩍 사각형은 번쩍일 때만 다시 그림(빈 Graphics 를 매 프레임 clear 하면 매번 다시 만듦) */
+    if (this.flash > 0.01) {
+      this.flashG.clear().rect(0, 0, view.w, view.h).fill({ color: 0xfff0b4, alpha: Math.min(0.28, this.flash * 0.5) });
+      this.flashOn = true;
+    } else if (this.flashOn) {
+      this.flashG.clear();
+      this.flashOn = false;
+    }
+    /* 안 보이는(알파 0) 전화면 스프라이트는 그리지 않음 — add 합성이라 그리기도 끊음 */
+    this.vignette.visible = this.vigAlpha > 0.002;
+    if (this.vignette.visible) {
+      this.vignette.width = view.w;
+      this.vignette.height = view.h;
+      this.vignette.tint = this.vigTint;
+      this.vignette.alpha = this.vigAlpha;
+    }
+    this.border.visible = this.borderAlpha > 0.002;
+    if (this.border.visible) {
+      this.border.width = view.w;
+      this.border.height = view.h;
+      this.border.tint = this.borderTint;
+      this.border.alpha = this.borderAlpha;
+    }
     if (this.waves.length) {
       let changed = false;
       for (const w of this.waves) {

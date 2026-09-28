@@ -1,9 +1,11 @@
 /**
  * 사무실 배경(화면 좌표): 원작 항구처럼 보라→분홍 노을 하늘(타원 중심이 화면 아래 바깥) + 반짝이는 별(패럴랙스 3층)
  * + 먼 스카이라인(0.3) + 가까운 스카이라인 + 흐르는 구름.
+ * 움직임(별 반짝·구름 흐름·패럴랙스)은 고화질만(설계서 7장 2). 그 밖에는 멈춘 그림 — 사무실이 가만히 있을 때 다시 그리지 않게.
  */
 import { Container, Sprite, TilingSprite, type Texture } from 'pixi.js';
 import { view } from '../core/stage';
+import { requestRender } from '../core/loop';
 import { T, gradientTex } from '../core/tex';
 
 let skyTex: Texture | null = null;
@@ -39,11 +41,15 @@ export class OfficeBg {
   private tx = 0;
   private ty = 0;
   private onMove = (e: PointerEvent) => {
+    if (!this.animated) return;
     this.tx = e.clientX / Math.max(1, view.w) - 0.5;
     this.ty = e.clientY / Math.max(1, view.h) - 0.5;
   };
+  /** 움직이는 배경(고화질). false 면 멈춘 한 장면 */
+  animated = true;
 
-  constructor() {
+  constructor(animated = true) {
+    this.animated = animated;
     this.skyS = new Sprite(sky());
     this.root.addChild(this.skyS);
     for (let i = 0; i < 70; i++) {
@@ -94,9 +100,29 @@ export class OfficeBg {
     this.near.position.set(-40, h + 2);
     this.far.position.set(-40, h - nh * 0.35);
     for (const c of this.clouds) c.sp.scale.set((h / 1080) * (c.layer ? 1.1 : 0.75) * (port ? 1.4 : 1));
+    if (!this.animated) this.pose(0);
+    requestRender(2);
+  }
+
+  /** 움직임을 켜고 끔(끄면 지금 모습 그대로 멈춤) */
+  setAnimated(on: boolean): void {
+    if (this.animated === on) return;
+    this.animated = on;
+    if (!on) {
+      this.tx = this.ty = this.px = this.py = 0;
+      this.pose(0);
+    }
+    requestRender(2);
   }
 
   update(dt: number): void {
+    if (!this.animated) return;
+    this.pose(dt);
+    requestRender();
+  }
+
+  /** 한 장면 배치. dt = 0 이면 시간을 흘리지 않고 지금 모습만 다시 놓음 */
+  private pose(dt: number): void {
     this.t += dt;
     const w = view.w;
     const h = view.h;

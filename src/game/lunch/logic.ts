@@ -3,19 +3,29 @@
  * 규칙·수치는 설계서 3장·밸런스 시뮬(sim.js)과 같다.
  */
 import {
-  DISTRICT_BY, F, ITEMS, SKILLS, SKILL_ORDER, TARGETS,
+  DISTRICT_BY, F, SKILLS, SKILL_ORDER, TARGETS,
   type DistrictDef, type MapData, type MapRoute, type SkillId, type TargetDef,
 } from '../data';
 import {
-  COMMISSION_RATE, DIST, E, MATCH, REQUIRE_BOTH_SIDES, RUN, SERVICE_FEE_RATE, addXp, lunchTime, power, radiusOf, refreshEff,
+  COMMISSION_RATE, DIST, E, MATCH, REQUIRE_BOTH_SIDES, RUN, SERVICE_FEE_RATE, TECH, addXp, itemPool, lunchTime, power, radiusOf, refreshEff,
   skLv, skillUnlocked, unlockedTargets,
 } from '../rules';
 import { S } from '../state';
+import { roadAxis, routeLen, routePose } from '../map/route';
+import type { Pose } from '../map/geom';
 
 const rand = Math.random;
+/** 경로 계산 임시 객체(매 스텝 새로 만들지 않게) */
+const POSE: Pose = { x: 0, y: 0, tx: 1, ty: 0 };
 const rnd = (a: number, b: number) => a + rand() * (b - a);
 const pickOne = <T>(a: T[]): T => a[Math.floor(rand() * a.length)];
 const hyp = Math.hypot;
+/** 배열 제자리 거르기(filter 와 같은 결과, 새 배열 없음) */
+function compact<T>(a: T[], keep: (v: T) => boolean): void {
+  let w = 0;
+  for (let i = 0; i < a.length; i++) if (keep(a[i])) a[w++] = a[i];
+  a.length = w;
+}
 /** 금액은 원 단위 정수: 반올림, 0보다 크면 최소 1원(아주 작은 계약에서 0원이 뜨지 않게) */
 export const won1 = (x: number): number => (x > 0 ? Math.max(1, Math.round(x)) : 0);
 /** 보스가 나올 수 있는 가장 이른 판 시간(초) — 영업 시작! 알약 0.95초 + 여유 */
@@ -26,17 +36,20 @@ export interface Ent {
   road: MapRoute | null; lots: number[]; life: number; grace: number; frz: number; hit: number; src: SkillId | null;
   tank: boolean; boss: boolean; dartT: number; dart: number; hopCD: number; hops: number; jetT: number;
   damaged: boolean; warn: boolean; fleeing: boolean; lifeMax: number; age: number; inR: boolean;
+  /** 도로형: 경로 위 길이 s, 핫플에 끌려간 만큼(ox, oy), 그림 방향(지금 구간의 축 · 화면 방향 +1 = 오른쪽/아래) */
+  s: number; ox: number; oy: number; rax: 'h' | 'v'; rdir: 1 | -1;
   /** 그림 쪽이 붙이는 자리 */
   view?: unknown;
 }
 export interface ContractResult {
-  gmv: number; comm: number; fee: number; rev: number; xp: number; point: number; crit: boolean; M: number; G0: number;
+  /** tech = 이번 계약 기술력(결제 대기여도 계약 순간 바로) */
+  gmv: number; comm: number; fee: number; rev: number; xp: number; tech: number; crit: boolean; M: number; G0: number;
   pending: boolean; grade: number; released: { gmv: number; comm: number } | null; fromSkill: SkillId | null;
 }
 export interface Chest { id: number; x: number; y: number; t: number; tier: number; got?: boolean }
 export interface Inquiry { id: number; x: number; y: number; vx: number; t: number; tier: number; got?: boolean }
 export interface FloatItem { id: number; item: string; x: number; y: number; t: number; got?: boolean }
-export interface Reward { rev: number; point: number; xp: number; item: string | null; itemNew: boolean }
+export interface Reward { rev: number; tech: number; xp: number; item: string | null; itemNew: boolean }
 export type SkFx =
   | { type: 'bomb'; id: number; sk: SkillId; x: number; y: number; t: number; fuse: number; r: number; dmg: number; echo: boolean; done?: boolean; isEcho?: boolean }
   | { type: 'jet'; id: number; sk: SkillId; x: number; y: number; vx: number; vy: number; t: number; life: number; dmg: number; ramp: number; trail: { x: number; y: number }[] }
@@ -63,7 +76,8 @@ export interface LunchEvents {
   inquiryPick(b: Inquiry, r: Reward): void;
   itemDrop(it: FloatItem): void;
   itemPick(it: FloatItem, isNew: boolean): void;
-  point(x: number, y: number, n: number, per10: boolean): void;
+  /** 계약 밖 기술력(매부장 10곳마다 = per10) */
+  tech(x: number, y: number, n: number, per10: boolean): void;
   levelUp(lv: number, gained: number): void;
   pendingRelease(gmv: number, comm: number): void;
   matchUp(step: number, M: number): void;
@@ -76,11 +90,14 @@ interface Lot { id: number; x: number; y: number; block: number; occ: number }
 interface Big { lots: number[]; x: number; y: number }
 
 export interface RunStats {
-  gmv: number; comm: number; fee: number; rev: number; xp: number; point: number; count: number; cN: number; rN: number; corps: number; stores: number;
+  gmv: number; comm: number; fee: number; rev: number; xp: number; tech: number; count: number; cN: number; rN: number; corps: number; stores: number;
   /** 선물 상자·인바운드 문의로 받은 매출(수수료·이용료와 따로). rev = comm + fee + bonus */
   bonus: number; bonusChest: number; bonusInq: number;
-  bestM: number; crits: number; best: { t: TargetDef; gmv: number } | null; newItems: string[]; newSeen: string[]; lvFrom: number; netC0: number; netR0: number;
+  /** best = 이번 판 매출이 가장 큰 계약(rev = 그 계약 수수료 + 이용료) */
+  bestM: number; crits: number; best: { t: TargetDef; gmv: number; rev: number } | null; newItems: string[]; newSeen: string[]; lvFrom: number; netC0: number; netR0: number;
   pendN: number; released: boolean; bossSigned: boolean; misses: number; salesLv: number; techLv: number;
+  /** 이번 판 보스 계약(정산 카드는 이것을 '전국 계약'으로 보여 줌 — 같은 날 대박 난 계약이 더 클 수 있어서) */
+  boss: { t: TargetDef; gmv: number; rev: number } | null;
 }
 
 export class Lunch {
@@ -100,6 +117,8 @@ export class Lunch {
   chests: Chest[] = [];
   inquiries: Inquiry[] = [];
   items: FloatItem[] = [];
+  /** 계약·퇴장 정리용 두 번째 배열(매 스텝 새 배열을 만들지 않게 번갈아 씀, 설계서 7장 11) */
+  private entsB: Ent[] = [];
   net = { x: 0, y: 0 };
   cd: Record<string, number> = {};
   cN = 0;
@@ -147,8 +166,8 @@ export class Lunch {
     for (const id of SKILL_ORDER) this.cd[id] = rnd(F.FIRST_SKILL[0], F.FIRST_SKILL[1]);
     this.gmvMult = 1 + E.gmv + (this.mod.gmv || 0);
     this.stats = {
-      gmv: 0, comm: 0, fee: 0, rev: 0, xp: 0, point: 0, count: 0, cN: 0, rN: 0, corps: 0, stores: 0, bonus: 0, bonusChest: 0, bonusInq: 0, bestM: 1, crits: 0, best: null, newItems: [], newSeen: [],
-      lvFrom: S.lv, netC0: S.netC, netR0: S.netR, pendN: 0, released: false, bossSigned: false, misses: 0, salesLv: 0, techLv: 0,
+      gmv: 0, comm: 0, fee: 0, rev: 0, xp: 0, tech: 0, count: 0, cN: 0, rN: 0, corps: 0, stores: 0, bonus: 0, bonusChest: 0, bonusInq: 0, bestM: 1, crits: 0, best: null, newItems: [], newSeen: [],
+      lvFrom: S.lv, netC0: S.netC, netR0: S.netR, pendN: 0, released: false, bossSigned: false, boss: null, misses: 0, salesLv: 0, techLv: 0,
     };
   }
 
@@ -182,7 +201,7 @@ export class Lunch {
     const e: Ent = {
       id: ++this.uid, t, x, y, dir, hp, max: hp, w: this.map.lot * t.s, road: null, lots: [], life: 0, grace: RUN.GRACE, frz: 0, hit: 0, src: null,
       tank: t.beh === 'tank' || t.beh === 'boss', boss: t.beh === 'boss', dartT: rnd(1, 4), dart: 0, hopCD: 0, hops: 0, jetT: -9,
-      damaged: false, warn: false, fleeing: false, lifeMax: 0, age: 0, inR: false, ...extra,
+      damaged: false, warn: false, fleeing: false, lifeMax: 0, age: 0, inR: false, s: 0, ox: 0, oy: 0, rax: 'h', rdir: 1, ...extra,
     };
     if (!e.road) {
       e.life = t.beh === 'boss' ? 1e9 : RUN.LIFE_BASE * rnd(RUN.LIFE_JITTER[0], RUN.LIFE_JITTER[1]) * (t.lifeMult || 1);
@@ -203,6 +222,9 @@ export class Lunch {
     const rare = 1 + E.rare + (this.mod.rare || 0);
     let lack: 'corp' | 'store' | null = null;
     if (E.autoMatch) lack = this.cN > this.rN ? 'store' : this.rN > this.cN ? 'corp' : null;
+    /* 첫 결제 연결 전(한쪽만 계약해 결제 대기 중): 반대쪽이 더 자주 나옴 — 거래액 0원 판이 이어지지 않게 */
+    const first: 'corp' | 'store' | null = S.netC > 0 && S.netR === 0 ? 'store' : S.netR > 0 && S.netC === 0 ? 'corp' : null;
+    const firstBias = MATCH.FIRST_BIAS || 0;
     /* 보스는 '영업 시작!' 알약(0.95초)이 사라진 뒤에 등장(첫 호출에 섞여 나오면 등장 연출이 시작 알약과 겹침) */
     const bossOut = this.stats.bossSigned || this.ents.some((e) => e.boss) || this.t < BOSS_AFTER;
     const ws = pool.map((f, k) => {
@@ -213,6 +235,7 @@ export class Lunch {
       if (f.big) w *= this.mod.bigBias || 1;
       w *= (this.dist.weight || {})[f.id] || 1;
       if (lack && f.side === lack) w *= 1 + E.autoMatch;
+      if (first && f.side === first) w *= 1 + firstBias;
       return w;
     });
     let tt = ws.reduce((a, b) => a + b, 0) * rand();
@@ -225,10 +248,13 @@ export class Lunch {
   private place(t: TargetDef, near?: { x: number; y: number }, initial = false): Ent | null {
     if (t.beh === 'boss' && this.t < BOSS_AFTER) t = this.pool[0];
     if (t.beh === 'road') {
+      /* 경로·방향 무작위, 곡선 경로의 끝(화면 밖)에서 출발 */
       const ln = pickOne(this.map.routes);
       const dir: 1 | -1 = rand() < 0.5 ? 1 : -1;
-      const s = dir > 0 ? ln.pts[0] : ln.pts[1];
-      return this.addEnt(t, s.x, s.y, dir, { road: ln }, initial);
+      const s0 = dir > 0 ? 0 : routeLen(ln);
+      const p = routePose(ln, s0, POSE);
+      const ax = roadAxis(p.tx * dir, p.ty * dir, Math.abs(p.tx) >= Math.abs(p.ty) ? 'h' : 'v');
+      return this.addEnt(t, p.x, p.y, dir, { road: ln, s: s0, rax: ax.ax, rdir: ax.d }, initial);
     }
     if (t.beh === 'boss') {
       /* 보스는 판 내내 한 곳만 — 이번 판에 이미 계약했으면 다시 나오지 않음 */
@@ -306,17 +332,17 @@ export class Lunch {
       return false;
     }
     const maxF = this.maxTargets();
-    const cap = () => this.ents.length < maxF;
     this.spawnT -= dt;
-    if (this.spawnT <= 0 && cap()) {
+    if (this.spawnT <= 0 && this.ents.length < maxF) {
       this.spawnFish();
-      this.spawnT = RUN.SPAWN_EVERY / (1 + E.spawn + (this.mod.spawn || 0));
+      /* 등장 간격 × 0.6~1.4 (설계서 5-5: 같은 박자로 나오지 않게) */
+      this.spawnT = (RUN.SPAWN_EVERY / (1 + E.spawn + (this.mod.spawn || 0))) * rnd(0.6, 1.4);
     }
     if (E.fps) {
       this.fpsT += dt * E.fps;
       while (this.fpsT >= 1) {
         this.fpsT -= 1;
-        if (cap()) this.spawnFish();
+        if (this.ents.length < maxF) this.spawnFish();
       }
     }
     if (!this.topDone && this.t > RUN.TOP1_AT && this.pool.length > 2) {
@@ -375,16 +401,25 @@ export class Lunch {
         }
         let dir = fs.dir;
         if (fs.t.flee && d < R * RUN.HOP_RANGE) {
-          const along = fs.road.ax === 'h' ? fs.x - nx : fs.y - ny;
-          const nd: 1 | -1 = along >= 0 ? 1 : -1;
+          /* 달아나기: 경로 앞뒤 중 반경에서 먼 쪽으로 */
+          const a = routePose(fs.road, fs.s + 8, POSE);
+          const da = hyp(a.x + fs.ox - nx, a.y + fs.oy - ny);
+          const b = routePose(fs.road, fs.s - 8, POSE);
+          const db = hyp(b.x + fs.ox - nx, b.y + fs.oy - ny);
+          const nd: 1 | -1 = da >= db ? 1 : -1;
           if (nd !== fs.dir || !fs.fleeing) this.ev.flee(fs);
           dir = nd;
           fs.dir = nd;
           sp *= 1.6;
           fs.fleeing = true;
         }
-        if (fs.road.ax === 'h') fs.x += dir * sp * dt;
-        else fs.y += dir * sp * dt;
+        fs.s += dir * sp * dt;
+        const p = routePose(fs.road, fs.s, POSE);
+        fs.x = p.x + fs.ox;
+        fs.y = p.y + fs.oy;
+        const ax = roadAxis(p.tx * dir, p.ty * dir, fs.rax);
+        fs.rax = ax.ax;
+        fs.rdir = ax.d;
       } else {
         fs.life -= dt;
         if (inR) fs.life = Math.max(fs.life, RUN.LIFE_HOLD);
@@ -438,6 +473,8 @@ export class Lunch {
           if (dd < fx.r) {
             if (fs.road && dd > 6) {
               const k = Math.min(1, dt * F.PASSIVE.hot.pull);
+              fs.ox += dx * k;
+              fs.oy += dy * k;
               fs.x += dx * k;
               fs.y += dy * k;
             }
@@ -488,15 +525,15 @@ export class Lunch {
         for (const fs of this.ents) if (hyp(fs.x - fx.x, fs.y - fx.y) < fx.r + fs.w * 0.3) this.hurt(fs, fx.dps * dt, fx.sk);
       }
     }
-    this.fx = this.fx.filter((fx) => (fx.type === 'bomb' ? !fx.done : fx.t < fx.life));
+    compact(this.fx, (fx) => (fx.type === 'bomb' ? !fx.done : fx.t < fx.life));
     /* 계약·퇴장 */
-    const alive: Ent[] = [];
-    const lo = this.DS.laneOver + 10;
+    const alive = this.entsB;
+    alive.length = 0;
     for (const fs of this.ents) {
       if (fs.hp <= 0) {
         this.release(fs);
         this.sign(fs);
-      } else if (fs.road && (fs.x < -lo || fs.x > this.map.W + lo || fs.y < this.map.area.y - lo || fs.y > this.map.H + lo)) {
+      } else if (fs.road && (fs.s < -10 || fs.s > routeLen(fs.road) + 10)) {
         this.ev.remove(fs, 'exit');
         this.stats.misses++;
       } else if (!fs.road && fs.life <= 0) {
@@ -505,6 +542,7 @@ export class Lunch {
         this.stats.misses++;
       } else alive.push(fs);
     }
+    this.entsB = this.ents;
     this.ents = alive;
     /* 선물 상자 */
     if (E.chest) this.chestT -= dt * (1 + (this.mod.chest || 0) + E.itemFind * 0.5 + F.CHEST.tierSpeed * (E.chest - 1));
@@ -521,7 +559,7 @@ export class Lunch {
         this.ev.chestOpen(c, this.openChest());
       }
     }
-    this.chests = this.chests.filter((c) => !c.got && c.t < F.CHEST.life);
+    compact(this.chests, (c) => !c.got && c.t < F.CHEST.life);
     /* 인바운드 문의 */
     if (E.inquiry) {
       this.inqT -= dt * (1 + F.INQUIRY.tierSpeed * (E.inquiry - 1));
@@ -541,7 +579,7 @@ export class Lunch {
         this.ev.inquiryPick(b, this.openInquiry());
       }
     }
-    this.inquiries = this.inquiries.filter((b) => !b.got && b.x > -60 * this.U && b.x < this.map.W + 60 * this.U);
+    compact(this.inquiries, (b) => !b.got && b.x > -60 * this.U && b.x < this.map.W + 60 * this.U);
     /* 떠오르는 아이템 */
     for (const r of this.items) {
       r.y -= this.DS.itemFloat * dt;
@@ -552,7 +590,7 @@ export class Lunch {
         this.ev.itemPick(r, isNew);
       }
     }
-    this.items = this.items.filter((r) => !r.got && r.t < F.ITEM.life && r.y > this.area.y0 - 50 * this.U);
+    compact(this.items, (r) => !r.got && r.t < F.ITEM.life && r.y > this.area.y0 - 50 * this.U);
     return true;
   }
 
@@ -639,7 +677,8 @@ export class Lunch {
       if (f.beh === 'boss') f = this.pool[0];
       if (f.beh !== 'road' && this.place(f, { x, y })) placed++;
     }
-    this.ev.ref(x, y, placed);
+    /* 한 곳도 못 놓았으면 연출 없음('소개 영업! +0곳' 방지) */
+    if (placed > 0) this.ev.ref(x, y, placed);
   }
 
   private matchMult(): number {
@@ -659,6 +698,17 @@ export class Lunch {
       pool.reduce((a, f) => a + (f.value + E.gflat) * (1 + E.gmv + (this.mod.gmv || 0)) * (COMMISSION_RATE * (1 + E.comm) + (f.side === 'corp' ? SERVICE_FEE_RATE * (1 + E.fee) : 0)), 0) / pool.length
     );
   }
+  /** 기술력 효과 배율 = 1 + 트리·대표·아이템 tech + 상권 tech */
+  techMult(): number {
+    return 1 + E.tech + (this.mod.tech || 0);
+  }
+  /** 계약당 평균 기술력(매칭 전, 지금 풀 기준) — 선물 상자·문의·중복 아이템·매부장 보상 기준 */
+  avgTech(): number {
+    const pool = this.pool;
+    return (
+      (pool.reduce((a, f) => a + (f.value + E.gflat) * (1 + E.gmv + (this.mod.gmv || 0)) * (f.side === 'corp' ? TECH.corp : TECH.store), 0) / pool.length) * this.techMult()
+    );
+  }
 
   /* ── 계약 ── */
   private sign(fs: Ent): void {
@@ -670,12 +720,15 @@ export class Lunch {
     const M = this.matchMult();
     this.M = M;
     st.bestM = Math.max(st.bestM, M);
-    let G0 = (f.value + E.gflat) * (1 + E.gmv + (this.mod.gmv || 0)) * (1 + (E.tv[f.id] || 0)) * (1 + 0.05 * (S.mastery[f.id] || 0)) * (crit ? RUN.CRIT_MULT : 1) * (fs.tank ? RUN.BIG_MULT : 1);
+    const G0 = (f.value + E.gflat) * (1 + E.gmv + (this.mod.gmv || 0)) * (1 + (E.tv[f.id] || 0)) * (1 + 0.05 * (S.mastery[f.id] || 0)) * (crit ? RUN.CRIT_MULT : 1) * (fs.tank ? RUN.BIG_MULT : 1);
     const src = fs.src;
-    if (src) G0 *= 1 + F.SKILL_LEVEL.bonusStep * skLv(src, 4);
+    /* 스킬 칸4(계약 보너스) = 그 스킬로 계약한 곳의 매출(수수료·이용료) +20%/레벨 — 거래액은 그대로 */
+    const sb = src ? 1 + F.SKILL_LEVEL.bonusStep * skLv(src, 4) : 1;
     const gmv = won1(G0 * M);
-    const comm = won1(gmv * COMMISSION_RATE * (1 + E.comm));
-    const fee = f.side === 'corp' ? won1(G0 * SERVICE_FEE_RATE * (1 + E.fee)) : 0;
+    const comm = won1(gmv * COMMISSION_RATE * (1 + E.comm) * sb);
+    const fee = f.side === 'corp' ? won1(G0 * SERVICE_FEE_RATE * (1 + E.fee) * sb) : 0;
+    /* 기술력 = G0 × M × (식당 7% · 기업 3%) × (1 + 기술력 효과 + 상권) — 결제 대기여도 바로 */
+    const tech = won1(G0 * M * (f.side === 'corp' ? TECH.corp : TECH.store) * this.techMult());
     const opp = f.side === 'corp' ? S.netR : S.netC;
     if (f.side === 'corp') {
       S.netC++;
@@ -710,6 +763,9 @@ export class Lunch {
     }
     S.revenue += rev;
     S.revTotal += rev;
+    S.tech += tech;
+    S.techTotal += tech;
+    st.tech += tech;
     S.gmv += gmvAdd;
     S.commTotal += commAdd;
     S.feeTotal += fee;
@@ -721,29 +777,23 @@ export class Lunch {
     if (crit) st.crits++;
     S.counts[f.id] = (S.counts[f.id] || 0) + 1;
     S.gmvBy[f.id] = (S.gmvBy[f.id] || 0) + gmv;
-    if (!st.best || gmv > st.best.gmv) st.best = { t: f, gmv };
-    if (!S.best || gmv > S.best.gmv) S.best = { id: f.id, gmv };
-    /* 대장포인트 */
-    let point = 0;
-    const dc = (f.tier >= RUN.POINT_HIGH_TIER ? RUN.POINT_CHANCE_HIGH : RUN.POINT_CHANCE_LOW) * (1 + E.point + (this.mod.point || 0));
-    if (rand() < dc) point = Math.max(1, Math.ceil(f.tier / 4));
+    /* 이 계약의 매출(결제 대기면 수수료는 풀릴 때 들어오지만 기록은 이 계약 몫으로) */
+    const own = comm + fee;
+    S.revBy[f.id] = (S.revBy[f.id] || 0) + own;
+    if (!st.best || own > st.best.rev) st.best = { t: f, gmv, rev: own };
+    if (!S.best || own > (S.best.rev || 0)) S.best = { id: f.id, gmv, rev: own };
     /* 경험치 */
     const xp = (f.xp + E.xflat) * (1 + E.xp + (this.mod.xp || 0));
     const grade = Math.min(fs.boss ? 4 : 3, f.grade + (crit ? 1 : 0));
-    const res: ContractResult = { gmv, comm, fee, rev, xp, point, crit, M, G0, pending, grade, released, fromSkill: src };
+    const res: ContractResult = { gmv, comm, fee, rev, xp, tech, crit, M, G0, pending, grade, released, fromSkill: src };
     this.ev.remove(fs, 'signed');
     this.ev.contract(fs, res);
     if (released) this.ev.pendingRelease(released.gmv, released.comm);
-    if (point) {
-      S.point += point;
-      st.point += point;
-      this.ev.point(fs.x, fs.y - fs.w * 0.6, point, false);
-    }
+    /* 매부장: 10곳마다 계약당 평균 기술력 × 2 */
     if (E.per10 && st.count % 10 === 0) {
-      const p = Math.round(E.per10);
-      S.point += p;
-      st.point += p;
-      this.ev.point(fs.x, fs.y - fs.w * 0.9, p, true);
+      const p = won1(this.avgTech() * TECH.per10K * E.per10);
+      this.addTech(p);
+      this.ev.tech(fs.x, fs.y - fs.w * 0.9, p, true);
     }
     st.xp += xp;
     const up = addXp(xp);
@@ -757,11 +807,25 @@ export class Lunch {
     if (E.respawn && rand() * 100 < E.respawn && this.ents.length < this.maxTargets()) this.spawnFish();
     if (E.wom && rand() * 100 < F.PASSIVE.wom.base + E.womC) this.womAt(fs.x, fs.y);
     if (rand() < RUN.ITEM_CHANCE * (1 + E.itemFind) * (f.tier >= RUN.ITEM_HIGH_TIER ? 2 : 1)) {
-      const it: FloatItem = { id: ++this.uid, item: pickOne(ITEMS).id, x: fs.x, y: fs.y - fs.w * 0.4, t: 0 };
+      /* 떨어지는 아이템 = 등급 풀(해금한 대상 수 ≥ 등급) 안에서 */
+      const it: FloatItem = { id: ++this.uid, item: pickOne(itemPool()).id, x: fs.x, y: fs.y - fs.w * 0.4, t: 0 };
       this.items.push(it);
       this.ev.itemDrop(it);
     }
-    if (fs.boss) st.bossSigned = true;
+    if (fs.boss) {
+      st.bossSigned = true;
+      st.boss = { t: f, gmv, rev: own };
+    }
+  }
+
+  private addTech(n: number): void {
+    S.tech += n;
+    S.techTotal += n;
+    this.stats.tech += n;
+  }
+  /** 중복 아이템 기술력 = max(dupMin, 계약당 평균 기술력 × dupK) */
+  dupTech(): number {
+    return won1(Math.max(TECH.dupMin, this.avgTech() * TECH.dupK));
   }
 
   private collectItem(id: string): boolean {
@@ -771,22 +835,22 @@ export class Lunch {
       refreshEff();
       return true;
     }
-    S.point += F.ITEM.dupPoint;
-    this.stats.point += F.ITEM.dupPoint;
+    this.addTech(this.dupTech());
     return false;
   }
   private openChest(): Reward {
     const C = F.CHEST;
     const r = rand();
     const tier = Math.max(1, E.chest);
-    const out: Reward = { rev: 0, point: 0, xp: 0, item: null, itemNew: false };
+    const out: Reward = { rev: 0, tech: 0, xp: 0, item: null, itemNew: false };
     if (r < C.split[0]) {
       out.rev = won1(Math.max(C.revMin, this.avgRev() * C.revK) * rnd(C.revJitter[0], C.revJitter[1]) * (1 + C.tierRev * (tier - 1)));
     } else if (r < C.split[1]) {
-      out.point = Math.round((C.point[0] + C.point[1] * tier) * (1 + E.point));
+      out.tech = won1(Math.max(TECH.chestMin, this.avgTech() * TECH.chestK) * rnd(C.revJitter[0], C.revJitter[1]) * (1 + C.tierRev * (tier - 1)));
     } else {
-      const p2 = ITEMS.filter((x) => !S.items[x.id]);
-      out.item = (p2.length ? pickOne(p2) : pickOne(ITEMS)).id;
+      const pool = itemPool();
+      const p2 = pool.filter((x) => !S.items[x.id]);
+      out.item = (p2.length ? pickOne(p2) : pickOne(pool)).id;
     }
     this.applyReward(out, 'chest');
     return out;
@@ -795,11 +859,11 @@ export class Lunch {
     const Q = F.INQUIRY;
     const tier = Math.max(1, E.inquiry);
     const r = rand();
-    const out: Reward = { rev: 0, point: 0, xp: 0, item: null, itemNew: false };
+    const out: Reward = { rev: 0, tech: 0, xp: 0, item: null, itemNew: false };
     out.xp = (this.pool.reduce((a, f) => a + f.xp + E.xflat, 0) / this.pool.length) * Q.xpK * tier * (1 + E.xp);
     if (r < Q.split[0]) out.rev = won1(Math.max(Q.revMin, this.avgRev() * Q.revK) * tier * rnd(Q.revJitter[0], Q.revJitter[1]));
-    else if (r < Q.split[1]) out.point = Math.round((Q.point[0] + Q.point[1] * tier) * (1 + E.point));
-    else out.item = pickOne(ITEMS).id;
+    else if (r < Q.split[1]) out.tech = won1(Math.max(TECH.inqMin, this.avgTech() * TECH.inqK) * tier * rnd(Q.revJitter[0], Q.revJitter[1]));
+    else out.item = pickOne(itemPool()).id;
     this.applyReward(out, 'inq');
     return out;
   }
@@ -813,10 +877,7 @@ export class Lunch {
       if (from === 'chest') st.bonusChest++;
       else st.bonusInq++;
     }
-    if (o.point) {
-      S.point += o.point;
-      st.point += o.point;
-    }
+    if (o.tech) this.addTech(o.tech);
     if (o.xp) {
       st.xp += o.xp;
       const up = addXp(o.xp);

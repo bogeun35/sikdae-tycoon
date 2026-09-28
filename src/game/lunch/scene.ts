@@ -6,13 +6,16 @@ import { DISTRICT_BY, F, FX, ITEM_BY, type SkillId } from '../data';
 import { art, audio, music, sfx } from '../deps';
 import { clock, resetClockFx, tickClock } from '../core/clock';
 import { L, app, lockOrient, onLayout, view } from '../core/stage';
-import { banner, confetti, dropQueuedBanners, flyCoin, fireworks, holdBanners, levelUpCut, rayCut, setBannerShift, type HudId } from '../fx/top';
-import { E, refreshEff } from '../rules';
+import { banner, confetti, dropQueuedBanners, flyCoin, fireworks, holdBanners, levelUpCut, rayCut, setBannerShift, warmTop, type HudId } from '../fx/top';
+import { E, refreshEff, unlockedTargets } from '../rules';
 import { S, saveGame } from '../state';
 import { Lunch, closeRun, type RunStats } from './logic';
 import { LunchView, type HudHooks } from './view';
+import { breath, todayMap } from '../map/today';
 import { LunchHud, anchorOf, bumpAnchor, disp } from '../../ui/hud';
 import { won } from '../format';
+
+import type { Renderer } from 'pixi.js';
 
 const STEP = 1 / 60;
 
@@ -42,8 +45,11 @@ export class LunchScene {
     lockOrient(view.orient);
     const orient = view.orient;
     const did = S.district;
-    const layers = art.mapLayers(did, orient);
-    const tex = await art.loadMap(app.renderer, did, orient);
+    /* 영업일마다 새 지도(설계서 5장): 와이프가 덮고 있는 동안 생성 → 한 프레임 쉬고 → 굽기 */
+    const today = todayMap(orient, did);
+    const layers = art.mapLayers(did, orient, today.seed, today.day);
+    await breath();
+    const tex = await art.loadMap(app.renderer, did, orient, today.seed, today.day);
     const hooks: HudHooks = {
       skillFired: (sk: SkillId) => this.hud.fire(sk),
       matchUp: (step, M) => {
@@ -61,7 +67,7 @@ export class LunchScene {
         }
       },
       levelUp: (lv, gained) => this.levelUp(lv, gained),
-      pendingRelease: (gmv) => this.pendingRelease(gmv),
+      pendingRelease: (gmv, comm) => this.pendingRelease(gmv, comm),
       tick: (sec) => {
         if (sec <= 5 && !this.hurry) {
           this.hurry = true;
@@ -85,6 +91,9 @@ export class LunchScene {
     this.offLayout = onLayout(() => this.fixLetterbox());
     this.fixLetterbox();
     document.body.classList.add('lunching');
+    /* 첫 계약·첫 배너·첫 새 거래처 때 생기던 긴 작업(글자 텍스처·첫 업로드)을 와이프 안으로(설계서 7장) */
+    await this.view.warm(app.renderer as unknown as Renderer);
+    await warmTop(unlockedTargets().filter((t) => t.grade >= 3).map((t) => `${t.name} · ${t.sizeLabel}`), S.lv + 1);
     music('lunch');
     sfx('lunch_start');
   }
@@ -161,11 +170,15 @@ export class LunchScene {
     sfx('level_up');
     void gained;
   }
-  private pendingRelease(gmv: number): void {
-    banner(FX.pendingRelease.banner, `결제 대기 ${won(gmv)}이 풀렸어요`);
+  /** 결제 대기가 풀림: 배너는 들어온 매출(수수료) 기준, 동전은 매출 알약으로 · 식권 2장만 거래액 칩으로 */
+  private pendingRelease(gmv: number, comm: number): void {
+    banner(FX.pendingRelease.banner, comm >= 1 ? `수수료 매출 +${won(comm)}` : `결제 대기 ${won(gmv)}이 풀렸어요`);
     sfx('pending_release');
     const from = anchorOf('hud.pending') || anchorOf('hud.gmv');
-    if (from) for (let i = 0; i < 20; i++) flyCoin('fx.ticket', { x: from.x + (Math.random() - 0.5) * 60, y: from.y + (Math.random() - 0.5) * 20 }, 'hud.gmv', i * 0.035, 1);
+    if (from) {
+      for (let i = 0; i < 6; i++) flyCoin('fx.coin', { x: from.x + (Math.random() - 0.5) * 60, y: from.y + (Math.random() - 0.5) * 20 }, 'hud.revenue', i * 0.04, 1);
+      for (let i = 0; i < 2; i++) flyCoin('fx.ticket', { x: from.x + (Math.random() - 0.5) * 60, y: from.y + (Math.random() - 0.5) * 20 }, 'hud.gmv', 0.2 + i * 0.05, 0.8);
+    }
     confetti(18, true);
     fireworks(2);
   }
@@ -190,9 +203,9 @@ export class LunchScene {
     /* 영업 HUD */
     this.hud.gain.gmv = this.lunch.stats.gmv;
     this.hud.gain.revenue = this.lunch.stats.rev;
-    this.hud.gain.point = this.lunch.stats.point;
+    this.hud.gain.tech = this.lunch.stats.tech;
     this.hud.setTimer(this.lunch.left);
-    this.hud.update(this.lunch);
+    this.hud.update(this.lunch, rt);
     const boss = this.lunch.ents.find((e) => e.boss);
     this.hud.setBoss(boss ? Math.max(0, boss.hp / boss.max) : null, rt);
     setBannerShift(boss ? 0.12 : 0);

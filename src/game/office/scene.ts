@@ -6,12 +6,14 @@ import { CHAR_BY, DISTRICT_BY, SKILLS, TARGET_BY, TREE, TREE_BY, type DistrictId
 import { music, sfx } from '../deps';
 import { fmt, fmtVal } from '../format';
 import {
-  E, anyNodeBuyable, anySkBuyable, canBuyItem, canBuyMastery, canBuyNode, nodeCost, nodeLinked, owns, refreshEff, repUnlocked, statLevels, STAT_MAX, tlv,
+  E, anyNodeBuyable, anySkBuyable, canBuyItem, canBuyMastery, canBuyNode, nodeCostObj, nodeLinked, nodeReqName, nodeReqOk, owns, refreshEff, repUnlocked, statLevels, STAT_MAX, tlv,
 } from '../rules';
 import { S, saveGame } from '../state';
 import { buyNode as shopBuyNode } from '../shop';
 import { TARGETS, ITEMS } from '../data';
 import { L, onLayout, uiRoot, view } from '../core/stage';
+import { gsapBusy, requestRender } from '../core/loop';
+import { budget, type TierBudget } from '../core/quality';
 import { rasterKey } from '../core/tex';
 import { districtCut, sparkleAt } from '../fx/top';
 import { OfficeBg } from './bg';
@@ -21,6 +23,7 @@ import { Panels, type PanelHooks } from '../../ui/panels';
 import { Sheet } from '../../ui/sheet';
 import { $, img, tapKey, toast } from '../../ui/dom';
 import { confirmBox, districtModal } from '../../ui/modals';
+import { keyChip } from '../../ui/kinds';
 import { screenToFx } from '../core/stage';
 
 export interface OfficeHooks extends Omit<PanelHooks, 'refresh' | 'confirm'> {
@@ -91,9 +94,13 @@ export class OfficeScene {
   enter(): void {
     this.active = true;
     this.hud.root.classList.add('on');
-    this.bg = new OfficeBg();
+    const anim = budget().officeAnim;
+    this.bg = new OfficeBg(anim);
     L.bg.addChild(this.bg.root);
     this.tree = new TreeView({ tap: (n) => this.tapNode(n) });
+    this.tree.setAnimated(anim);
+    /* 출발 버튼 빛 고리를 처음부터 다시(가벼운 화질은 몇 번만 움직이고 멈춤) */
+    this.hud.go.classList.toggle('re');
     L.bg.addChild(this.tree.root);
     this.offLayout = onLayout(() => this.layout());
     /* 숫자가 길어져 HUD 가 한 줄 더 늘면 패널·트리를 다시 맞춤 (폰 세로에서 메뉴 원이 패널에 가려지던 것) */
@@ -182,11 +189,12 @@ export class OfficeScene {
 
   private renderTreeHead(): void {
     const st = statLevels();
+    /* 가지 이름 옆 아이콘 = 그 가지를 사는 재화(영업 가지 = 매출 동전, 기술 가지 = 기술력 톱니) */
     const bar = (cls: string, icon: string, name: string, v: number, mx: number, col: string) =>
-      `<div class="th ${cls}">${img(icon)}<span>${name} Lv ${v}/${mx}</span><div class="thb"><i style="width:${Math.min(100, (v / mx) * 100)}%;background:${col}"></i></div></div>`;
+      `<div class="th ${cls}">${img(icon)}<span>${name}&nbsp;${v}/${mx}</span><div class="thb"><i style="width:${Math.min(100, (v / mx) * 100)}%;background:${col}"></i></div></div>`;
     this.hud.treeHead.innerHTML =
-      bar('l', 'ic.sales', '영업력', st.sales, STAT_MAX.sales, 'linear-gradient(90deg,#ffb09a,#ff7b5e)') +
-      bar('r', 'ic.tech', '기술력', st.tech, STAT_MAX.tech, 'linear-gradient(90deg,#9fd3ff,#4aa3df)') +
+      bar('l', 'ic.revenue', '영업 가지', st.sales, STAT_MAX.sales, 'linear-gradient(90deg,#ffb09a,#ff7b5e)') +
+      bar('r', 'ic.tech', '기술 가지', st.tech, STAT_MAX.tech, 'linear-gradient(90deg,#9fd3ff,#4aa3df)') +
       `<div class="tcenter pe" data-a="center">${img('ic.back')}가운데로</div>`;
     $(this.hud.treeHead, '[data-a="center"]')?.addEventListener('pointerdown', () => {
       sfx('ui_tap');
@@ -225,16 +233,19 @@ export class OfficeScene {
       const tgName = n.ef === 'cds' || n.ef === 'dbl' ? `${SKILLS[String(tg) as keyof typeof SKILLS]?.name || ''} ` : '';
       desc = `${tgName}${labText(n.lab)} · ${l ? cur : '없음'}${nx ? ` → ${nx}` : ''}`;
     }
-    const br = n.br === 'sales' ? '영업력' : n.br === 'tech' ? '기술력' : '공통';
+    const br = n.br === 'sales' ? '영업 가지' : n.br === 'tech' ? '기술 가지' : '공통';
     return { title, desc: `${desc} · ${br}` };
   }
   private showNode(n: TreeNode): void {
     const { title, desc } = this.nodeDesc(n);
     const l = tlv(n.id);
     const icon = n.icon;
-    if (l >= n.max) this.sheet.show(icon, title, desc, { state: 'max' });
-    else if (!nodeLinked(n)) this.sheet.show(icon, title, desc, { state: 'link', cost: { rev: nodeCost(n), point: 0 } });
-    else this.sheet.show(icon, title, desc, { cost: { rev: nodeCost(n), point: 0 } });
+    /* 제목 옆 효과 칩(트리 칸 가격표와 같은 칩) */
+    const chips = keyChip(n.ef);
+    if (l >= n.max) this.sheet.show(icon, title, desc, { state: 'max', chips });
+    else if (!nodeLinked(n)) this.sheet.show(icon, title, desc, { state: 'link', cost: nodeCostObj(n), chips });
+    else if (!nodeReqOk(n)) this.sheet.show(icon, title, desc, { state: 'lock', lockText: `먼저: ${nodeReqName(n)}`, chips });
+    else this.sheet.show(icon, title, desc, { cost: nodeCostObj(n), chips });
     this.sheet.bind(() => this.showNode(n));
   }
   private tapNode(n: TreeNode): void {
@@ -332,12 +343,20 @@ export class OfficeScene {
     return false;
   }
 
+  /** 화질 등급이 바뀜: 배경·트리 별 움직임 켜고 끔(설계서 7장) */
+  applyQuality(b: TierBudget): void {
+    this.bg?.setAnimated(b.officeAnim);
+    this.tree?.setAnimated(b.officeAnim);
+  }
+
   private tick = 0;
-  update(dt: number): void {
+  update(dt: number, wall = dt): void {
     if (!this.active) return;
-    S.play += dt;
+    S.play += wall;
     this.bg?.update(dt);
     this.tree?.update(dt);
+    /* 트리 칸 튀기·구매 번쩍 같은 트윈이 도는 동안만 다시 그림(가만히 있으면 사무실은 그리지 않음) */
+    if (gsapBusy()) requestRender();
     this.hud.update();
     this.tick += dt;
     if (this.tick > 0.5) {

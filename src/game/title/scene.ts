@@ -5,7 +5,7 @@
 import { Container, Sprite, Text, type Texture } from 'pixi.js';
 import gsap from 'gsap';
 import { FONT_STACK } from '../../fonts';
-import { VERSION } from '../data';
+import { VERSION_LABEL } from '../data';
 import { sfx } from '../deps';
 import { L, onLayout, view } from '../core/stage';
 import { T, rasterKey } from '../core/tex';
@@ -31,7 +31,7 @@ export class TitleScene {
       `<div class="load"><div class="bar"><i></i></div><p data-v="lt">준비 중…</p></div>
        <div class="tbtns"></div>
        <div class="menu"><button class="mb fs tw" data-a="fs" aria-label="전체화면">${''}</button></div>
-       <div class="ver">v${VERSION}</div>`,
+       <div class="ver">v${VERSION_LABEL}</div>`,
     );
     parent.appendChild(this.dom);
     L.bg.addChild(this.world);

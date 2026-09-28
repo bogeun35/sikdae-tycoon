@@ -30,8 +30,11 @@ export const DEFAULT_VOLUME: Record<VolumeKind, number> = { master: 0.85, music:
 /** 배경음 버스 게인 = 0.18 × 음악 음량 (기본 0.6 → 0.108, 효과음보다 약 14dB 작게) */
 export const BGM_GAIN = 0.18;
 
-/** 동시에 울리는 효과음 수 한도 */
-export const MAX_VOICES = 14;
+/** 동시에 울리는 효과음 수 한도(설계서 7장 7: 8 — 폰 발열. important 는 무시) */
+export const MAX_VOICES = 8;
+
+/** 같은 이름 최소 간격(초) — THROTTLE 에 따로 없는 이름 */
+export const MIN_GAP = 0.04;
 
 /** localStorage 키 (storage.ts 가 `sikdae-tycoon:` 접두어를 붙인다) */
 export const STORAGE_KEY = 'sikdae_tycoon_vol';

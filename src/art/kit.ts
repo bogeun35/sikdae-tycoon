@@ -355,6 +355,17 @@ export function wonPath(h: number): string {
   const w = h * 0.95;
   return `M${-w} ${-h}L${-w * 0.5} ${h}L0 ${-h * 0.35}L${w * 0.5} ${h}L${w} ${-h}M${-w * 1.05} ${-h * 0.2}H${w * 1.05}M${-w * 0.92} ${h * 0.25}H${w * 0.92}`;
 }
+/** 톱니 path(기술력 표시 — 가운데 cx,cy, 바깥 반지름 r, 이 수 teeth). 채워서 씀 */
+export function gearPath(cx: number, cy: number, r: number, teeth = 8): string {
+  let d = '';
+  for (let i = 0; i < teeth * 2; i++) {
+    const a = (i / (teeth * 2)) * Math.PI * 2;
+    const a2 = ((i + 1) / (teeth * 2)) * Math.PI * 2;
+    const rr = i % 2 ? r * 0.78 : r;
+    d += (i ? 'L' : 'M') + n2(cx + Math.cos(a) * rr) + ' ' + n2(cy + Math.sin(a) * rr) + 'L' + n2(cx + Math.cos(a2) * rr) + ' ' + n2(cy + Math.sin(a2) * rr);
+  }
+  return d + 'Z';
+}
 /** P 모양 path (가운데 0,0, 높이 2h). 굵은 선 */
 export function pPath(h: number): string {
   const w = h * 0.62;

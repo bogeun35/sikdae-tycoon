@@ -18,9 +18,10 @@ export interface ArtModule {
   SPRITE_KEYS: readonly string[];
   SIZES: Record<string, SpriteSize>;
   svg(id: string, state?: string): string;
-  loadAll(renderer: Renderer, onProgress?: (done: number, total: number) => void, opts?: { resolution?: number; skipLazy?: boolean }): Promise<Record<string, Texture>>;
-  loadMap(renderer: Renderer, districtId: DistrictId, orient: Orient): Promise<{ ground: Texture; roads: Texture }>;
-  mapLayers(districtId: DistrictId, orient?: Orient): MapLayers;
+  loadAll(renderer: Renderer, onProgress?: (done: number, total: number) => void, opts?: { resolution?: number; skipLazy?: boolean; only?: (key: string, group: string) => boolean; perFrame?: number }): Promise<Record<string, Texture>>;
+  /** 지도(설계서 5장): seed·day 를 주면 그 영업일 지도, 안 주면 씨앗 0 · 영업일 0 */
+  loadMap(renderer: Renderer, districtId: DistrictId, orient: Orient, seed?: number, day?: number): Promise<{ ground: Texture; roads: Texture }>;
+  mapLayers(districtId: DistrictId, orient?: Orient, seed?: number, day?: number): MapLayers;
   tex(key: string): Texture;
 }
 

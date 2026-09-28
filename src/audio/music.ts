@@ -343,3 +343,27 @@ export class Player {
     }
   }
 }
+
+/* ------------------------------------------------------------------ 굽기(bake.ts)용 */
+
+/** 굽기 스텝 길이(초): hurry 는 hurryable 곡만 ×1.12 */
+export function bakeStepDur(track: Track, hurry: boolean): number {
+  const th = THEMES[track];
+  return 60 / (th.bpm * (hurry && th.hurryable ? 1.12 : 1)) / 4;
+}
+export const themeGain = (track: Track): number => THEMES[track].gain;
+export const themeHurryable = (track: Track): boolean => THEMES[track].hurryable;
+
+/**
+ * 한 루프(TOTAL 스텝) 가운데 [from, to) 스텝을 x 에 예약(시작 t0). 늘 안정 상태로 굽는다(abs 를 TOTAL 부터 세어
+ * title 킥·boss 크래시 같은 "두 번째 루프부터" 소리가 처음부터 들어감).
+ */
+export function bakeSteps(track: Track, x: X, hurry: boolean, from: number, to: number, t0: number): void {
+  const th = THEMES[track];
+  const sd = bakeStepDur(track, hurry);
+  const s: PlayState = { abs: TOTAL + from, hurry: hurry && th.hurryable };
+  for (let k = from; k < to; k++) {
+    th.step(x, Math.floor(k / STEPS), k % STEPS, t0 + k * sd, sd, s);
+    s.abs++;
+  }
+}

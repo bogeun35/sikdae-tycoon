@@ -1,14 +1,21 @@
 /**
  * 그림 API — 설계서 8장 계약 (PixiJS v8)
  *
- *   SPRITE_KEYS · SIZES · svg(id, state) · loadAll(renderer, onProgress, opts) · loadMap(renderer, district, orient)
- *   mapLayers(district, orient) · tex(key)
+ *   SPRITE_KEYS · SIZES · svg(id, state) · loadAll(renderer, onProgress, opts) · loadMap(renderer, district, orient, seed?, day?)
+ *   mapLayers(district, orient, seed?, day?) · tex(key)
+ *
+ * 지도(설계서 5장): mapLayers = 생성기(src/game/map/gen.ts) 결과, loadMap = 그 지도를 Canvas2D 한 장으로 구운 텍스처(바닥+도로+장식).
+ * 씨앗을 안 주면 씨앗 0 · 영업일 0 지도(썸네일과 같은 그림).
  *
  * 그림은 전부 코드 SVG. 외부 그림 파일 0개. 시작할 때 화면에 맞는 해상도로 래스터화해 Texture 로 캐시한다.
  * 계약 밖 추가(덧붙이기만): EXTRA_KEYS(대상 눈 감은 프레임 t.<id>@blink) · loadOne · svgUrl · worldScaleNow · FX_TOP_KEYS
  */
 import { Texture, type Renderer } from 'pixi.js';
-import { SPRITE_KEYS, SIZES, EXTRA_KEYS, FX_TOP_KEYS, GDD, type DistrictId, type Orient, type SpriteGroup, type SpriteSize, type MapData } from './registry';
+import { SPRITE_KEYS, SIZES, EXTRA_KEYS, FX_TOP_KEYS, type DistrictId, type Orient, type SpriteGroup, type SpriteSize } from './registry';
+import type { MapData } from '../game/data';
+import { genMap } from '../game/map/gen';
+import { bakeMap, type SpriteSrc } from './draw/mapbake';
+import { setMapSprites } from './draw/maps';
 import { svgOfKey, warnOnce } from './render';
 import { ATLAS, decodeSvg, frameTex, makeCanvas, nextFrame, pack, preUpload, safePx, sourceFor, svgDataUrl, type PackIn } from './raster';
 
@@ -118,11 +125,14 @@ function bucketOf(key: string): 'p' | 'top' | 'main' {
 export async function loadAll(
   renderer: Renderer,
   onProgress?: (done: number, total: number) => void,
-  opts?: { resolution?: number; skipLazy?: boolean },
+  opts?: { resolution?: number; skipLazy?: boolean; only?: (key: string, group: string) => boolean; perFrame?: number },
 ): Promise<Record<string, Texture>> {
   const base = clamp(opts?.resolution ?? defaultRes(), 1, 2);
   const skipLazy = opts?.skipLazy !== false;
-  const keys = [...SPRITE_KEYS, ...EXTRA_KEYS].filter((k) => !TEX[k] && (!SIZES[k].lazy || (!skipLazy && !k.startsWith('m.'))));
+  /* only = 이번에 구울 것만(설계서 7-추가 로딩: 타이틀·사무실 그림 먼저, 영업 그림은 뒤에서 나눠) */
+  const only = opts?.only;
+  const keys = [...SPRITE_KEYS, ...EXTRA_KEYS].filter((k) => !TEX[k] && (!SIZES[k].lazy || (!skipLazy && !k.startsWith('m.'))) && (!only || only(k, SIZES[k].group)));
+  const per = Math.max(1, opts?.perFrame ?? 8);
   const total = keys.length;
   let done = 0;
   onProgress?.(0, total);
@@ -170,9 +180,9 @@ export async function loadAll(
     jobs.push({ key: k, pw: Math.round(s.w * r), ph: Math.round(s.h * r), draw: (img) => g.drawImage(img, 0, 0, s.w * r, s.h * r) });
   }
 
-  // 2) 8장씩 그리기
-  for (let i = 0; i < jobs.length; i += 8) {
-    const batch = jobs.slice(i, i + 8);
+  // 2) per 장씩 그리기(기본 8)
+  for (let i = 0; i < jobs.length; i += per) {
+    const batch = jobs.slice(i, i + per);
     const imgs = await Promise.all(
       batch.map((j) =>
         decodeSvg(svgOfKey(j.key, j.pw, j.ph)).catch((e) => {
@@ -217,55 +227,80 @@ export async function loadOne(renderer: Renderer | undefined, key: string, opts?
 
 /* ───────── 지도 ───────── */
 
-const mapCache: string[] = [];
+/** 지도 생성·굽기 측정값 (검수용, 숫자만) */
+export const mapPerf = { genMs: 0, bakeMs: 0, uploadMs: 0, res: 0, pw: 0, ph: 0, key: '' };
 
-/**
- * lazy 지도 레이어 2장. 바닥과 도로를 한 장으로 합쳐 굽는다(roads = Texture.EMPTY).
- * resolution = clamp(worldScale × DPR, 1, 2). 최근 2개만 캐시, 밀려난 것은 destroy(true).
- */
-export async function loadMap(renderer: Renderer, districtId: DistrictId, orient: Orient): Promise<{ ground: Texture; roads: Texture }> {
-  const gk = `m.${districtId}.ground@${orient}`, rk = `m.${districtId}.roads@${orient}`;
-  const id = `${districtId}@${orient}`;
-  const hit = mapCache.indexOf(id);
-  if (hit >= 0 && TEX[gk]) {
-    mapCache.splice(hit, 1);
-    mapCache.push(id);
-    return { ground: TEX[gk], roads: TEX[rk] ?? Texture.EMPTY };
-  }
-  const s = SIZES[gk];
-  const r = viewRes();
-  const pw = safePx(s.w, r), ph = safePx(s.h, r);
-  const cv = makeCanvas(pw, ph);
-  const src = sourceFor(cv, r, gk);
-  const [ig, ir] = await Promise.all([decodeSvg(svgOfKey(gk, Math.round(s.w * r), Math.round(s.h * r))), decodeSvg(svgOfKey(rk, Math.round(s.w * r), Math.round(s.h * r)))]);
-  const g = cv.getContext('2d')!;
-  g.drawImage(ig, 0, 0, s.w * r, s.h * r);
-  g.drawImage(ir, 0, 0, s.w * r, s.h * r);
-  src.update();
-  preUpload(renderer, src);
-  TEX[gk] = frameTex(src, 0, 0, s.w, s.h, gk);
-  TEX[rk] = Texture.EMPTY;
-  mapCache.push(id);
-  while (mapCache.length > 2) {
-    const old = mapCache.shift()!;
-    const [d, o] = old.split('@');
-    const ok = `m.${d}.ground@${o}`;
-    TEX[ok]?.destroy(true);
-    delete TEX[ok];
-    delete TEX[`m.${d}.roads@${o}`];
-  }
-  return { ground: TEX[gk], roads: Texture.EMPTY };
+/** 아틀라스에 구운 장식 그림을 캔버스에 옮겨 그릴 때 쓰는 원본 조각 */
+function spriteSrc(key: string): SpriteSrc | null {
+  const t = TEX[key];
+  if (!t || t.destroyed) return null;
+  const src = t.source as unknown as { resource?: CanvasImageSource; resolution: number };
+  if (!src.resource) return null;
+  const r = src.resolution || 1;
+  const f = t.frame;
+  return { img: src.resource, sx: f.x * r, sy: f.y * r, sw: f.width * r, sh: f.height * r };
+}
+setMapSprites(spriteSrc);
+/* 검수 훅: 숫자만 */
+(globalThis as unknown as { __mapPerf?: typeof mapPerf }).__mapPerf = mapPerf;
+
+/** 지도 텍스처 해상도 = min(화질 상한, worldScale × DPR). 폰(터치 · 짧은 변 < 900) 상한 1.5, 그 밖 2 */
+function mapRes(): number {
+  const touch = typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0;
+  const cap = touch && Math.min(innerWidth || 1920, innerHeight || 1080) < 900 ? 1.5 : 2;
+  return clamp(Math.round(worldScaleNow() * dpr() * 100) / 100, 0.5, cap);
 }
 
-const layerCache: Record<string, MapLayers> = {};
+const layerCache = new Map<string, MapLayers>();
+const mid = (d: DistrictId, o: Orient, seed: number, day: number) => `${d}@${o}#${seed >>> 0}:${day | 0}`;
 
-/** 지도 배치(= gdd-data.json maps[districtId][orient]) + 레이어 스프라이트 key. 결정적 */
-export function mapLayers(districtId: DistrictId, orient: Orient = 'land'): MapLayers {
-  const id = `${districtId}@${orient}`;
-  if (layerCache[id]) return layerCache[id];
-  const m = GDD.maps[districtId]?.[orient];
-  if (!m) throw new Error(`[art] 지도 없음: ${id}`);
-  const out: MapLayers = { ...m, district: districtId, orient, ground: `m.${districtId}.ground@${orient}`, roadsLayer: `m.${districtId}.roads@${orient}` };
-  layerCache[id] = out;
+/** 지도 배치(생성기 결과) + 레이어 key. 같은 인자면 같은 지도(최근 6개 캐시) */
+export function mapLayers(districtId: DistrictId, orient: Orient = 'land', seed = 0, day = 0): MapLayers {
+  const id = mid(districtId, orient, seed, day);
+  const hit = layerCache.get(id);
+  if (hit) return hit;
+  const t0 = performance.now();
+  const m = genMap(districtId, orient, seed, day);
+  mapPerf.genMs = Math.round((performance.now() - t0) * 10) / 10;
+  const out: MapLayers = { ...m, ground: `m.${districtId}.ground@${orient}`, roadsLayer: `m.${districtId}.roads@${orient}` };
+  layerCache.set(id, out);
+  /* 오늘 지도 + 바로 전(방향 전환) 정도만: 6장이면 영업일마다 힙이 약 0.3MB 씩 여섯 날 늘었음(설계서 7-추가 메모리) */
+  while (layerCache.size > 3) layerCache.delete(layerCache.keys().next().value!);
   return out;
+}
+
+const mapTex = new Map<string, Texture>();
+
+/**
+ * 지도 한 장: 바닥·도로·장식을 Canvas2D 한 장에 구워 텍스처 1장(roads = Texture.EMPTY).
+ * 최근 2개만 캐시, 밀려난 것은 destroy(true).
+ */
+export async function loadMap(renderer: Renderer, districtId: DistrictId, orient: Orient, seed = 0, day = 0): Promise<{ ground: Texture; roads: Texture }> {
+  const id = mid(districtId, orient, seed, day);
+  const hit = mapTex.get(id);
+  if (hit && !hit.destroyed) {
+    mapTex.delete(id);
+    mapTex.set(id, hit);
+    return { ground: hit, roads: Texture.EMPTY };
+  }
+  const m = mapLayers(districtId, orient, seed, day);
+  const r = mapRes();
+  const pw = safePx(m.W, r), ph = safePx(m.H, r);
+  const cv = makeCanvas(pw, ph);
+  const t0 = performance.now();
+  bakeMap(cv.getContext('2d', { alpha: false })!, m, r, spriteSrc);
+  const t1 = performance.now();
+  const src = sourceFor(cv, r, `map-${id}`);
+  src.update();
+  preUpload(renderer, src);
+  const t2 = performance.now();
+  Object.assign(mapPerf, { bakeMs: Math.round((t1 - t0) * 10) / 10, uploadMs: Math.round((t2 - t1) * 10) / 10, res: r, pw, ph, key: id });
+  const tex = frameTex(src, 0, 0, m.W, m.H, id);
+  mapTex.set(id, tex);
+  while (mapTex.size > 2) {
+    const [k, old] = mapTex.entries().next().value!;
+    mapTex.delete(k);
+    old.destroy(true);
+  }
+  return { ground: tex, roads: Texture.EMPTY };
 }

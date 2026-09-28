@@ -32,8 +32,8 @@ export const art: ArtModule = {
     return artMod.svg(id, state);
   },
   loadAll: (renderer, onProgress, opts) => artMod.loadAll(renderer, onProgress, opts),
-  loadMap: (renderer, districtId, orient) => artMod.loadMap(renderer, districtId, orient),
-  mapLayers: (districtId, orient) => artMod.mapLayers(districtId, orient),
+  loadMap: (renderer, districtId, orient, seed, day) => artMod.loadMap(renderer, districtId, orient, seed, day),
+  mapLayers: (districtId, orient, seed, day) => artMod.mapLayers(districtId, orient, seed, day),
   tex(key: string): Texture {
     note(key);
     return artMod.tex(key);
@@ -67,6 +67,21 @@ export function sfx(name: SfxName, opts?: SfxOpts): void {
 export function music(track: Track | null, opts?: { fade?: number }): void {
   try {
     audio.music(track, opts);
+  } catch {
+    /* 무시 */
+  }
+}
+/** 소리 굽기를 해도 되는 때(설계서 7장 7: 영업 화면 밖) · 틀지 않고 미리 굽기(보스 곡) */
+export function setAudioBakeGate(fn: () => boolean): void {
+  try {
+    audioMod.setBakeGate(fn);
+  } catch {
+    /* 무시 */
+  }
+}
+export function prefetchMusic(track: Track): void {
+  try {
+    audioMod.prefetchMusic(track);
   } catch {
     /* 무시 */
   }

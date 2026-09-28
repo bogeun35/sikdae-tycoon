@@ -3,23 +3,34 @@
  *  바닥 → 도로 → 그림자 → 배우(y 정렬: 장식·대상·선물·보행자·차) → 구름 그림자 → 설득 게이지 → 스킬 효과 → 문의·아이템
  *  → 판교 어둠·세종 꽃잎 → 영업 반경 → 파티클 → 숫자 → 도장·말풍선 → (화면) 번쩍·비네트
  */
-import { BitmapText, Container, Graphics, NineSliceSprite, Sprite, Text, type Texture } from 'pixi.js';
+import { BitmapText, Container, Graphics, NineSliceSprite, Point, RenderTexture, Sprite, Text, type Renderer, type Texture } from 'pixi.js';
 import gsap from 'gsap';
 import { FONT_STACK } from '../../fonts';
 import type { MapLayers } from '../contracts';
-import { CONTRACT_FX, DISTRICT_BY, F, FX, TARGETS, type SkillId, type TargetDef } from '../data';
+import { CONTRACT_FX, DISTRICT_BY, FX, TARGETS, type SkillId, type TargetDef } from '../data';
 import { sfx, music, audio } from '../deps';
 import { fmt } from '../format';
 import { clock, hitstop, slowmo } from '../core/clock';
-import { EV_BASE, EV_FONT } from '../core/fonts';
-import { markFx, view, worldToFx } from '../core/stage';
-import { T, circle, pill } from '../core/tex';
+import { EV_BASE, EV_FONT, NUM_BASE, NUM_FONT } from '../core/fonts';
+import { unlockedTargets } from '../rules';
+import { breath } from '../map/today';
+import { view, worldToFx } from '../core/stage';
+import { budget, type TierBudget } from '../core/quality';
+import { hudVersion } from '../../ui/hud';
+import { T, circle, pill, setTint } from '../core/tex';
+import { detachCached, releaseText, takeText } from '../core/textcache';
 import { Camera } from '../fx/camera';
-import { Numbers } from '../fx/numbers';
+import { Numbers, type KeepOut } from '../fx/numbers';
 import { Particles } from '../fx/particles';
-import { banner, climax, confetti, dimScreen, fireworks, flyCoin, type HudId } from '../fx/top';
+import { banner, bannerRects, climax, confetti, dimScreen, fireworks, flyCoin, holdLevelUp, type HudId } from '../fx/top';
 import { S } from '../state';
 import type { Chest, ContractResult, Ent, FloatItem, Inquiry, Lunch, LunchEvents, Reward, SkFx } from './logic';
+import type { MapPt } from '../data';
+import { cumLen, offsetLine, poseAt, type Pose } from '../map/geom';
+import { roadAxis } from '../map/route';
+
+/** 차·보행자 위치 계산 임시 객체 */
+const AMB: Pose = { x: 0, y: 0, tx: 1, ty: 0 };
 
 export interface HudHooks {
   skillFired(sk: SkillId): void;
@@ -27,7 +38,8 @@ export interface HudHooks {
   portrait(kind: 'nod' | 'cheer'): void;
   itemGet(id: string, isNew: boolean): void;
   levelUp(lv: number, gained: number): void;
-  pendingRelease(gmv: number): void;
+  /** 결제 대기가 풀림: gmv = 풀린 거래액, comm = 그만큼 들어온 수수료 매출 */
+  pendingRelease(gmv: number, comm: number): void;
   tick(sec: number): void;
   bossAppear(): void;
   pendingAnchor(): HudId;
@@ -40,8 +52,21 @@ interface TV {
   hopT: number; hopFrom: { x: number; y: number }; sweatT: number; fleeT: number; texKey: string; ph: number;
   clock: Sprite | null; wmark: Sprite | null; crown: Sprite | null; lights: Sprite[]; pill: Container | null; pillT: number; pillHW: number; arrow: Sprite | null; arrowT: number;
   dx: number; dy: number; popped: boolean;
+  /** 그림 key 표(매 프레임 문자열을 새로 만들지 않게) · 지금 틴트 */
+  keys: TexKeys;
 }
-interface Stamp { c: Container; ink: Sprite; ring: Sprite; txt: Text; t: number; s: number; rot: number; x: number; y: number; alive: boolean }
+interface TexKeys { idle: string; hit: string; happy: string; blink: string; up: string; down: string }
+const KEYS = new Map<string, TexKeys>();
+function keysOf(id: string): TexKeys {
+  let k = KEYS.get(id);
+  if (!k) {
+    const b = `t.${id}@`;
+    k = { idle: b + 'idle', hit: b + 'hit', happy: b + 'happy', blink: b + 'blink', up: b + 'up', down: b + 'down' };
+    KEYS.set(id, k);
+  }
+  return k;
+}
+interface Stamp { c: Container; ink: Sprite; ring: Sprite; txt: Text; t: number; s: number; rot: number; x: number; y: number; alive: boolean; boss?: boolean }
 interface Bubble { c: Container; bg: NineSliceSprite; txt: Text; t: number; alive: boolean; x: number; y: number }
 
 const ROAD_KEYS = { h: ['idle', 'hit', 'happy'], v: ['up', 'down'] };
@@ -62,6 +87,23 @@ function killDeep(o: Container | null | undefined): void {
   gsap.killTweensOf(o);
   gsap.killTweensOf(o.scale);
   for (const ch of o.children) killDeep(ch as Container);
+}
+/** 도장 지름 최소(화면 CSS px). 폰 세로처럼 지도가 작게 보일 때도 '영업 성공!' 두 줄이 한 줄 약 13px 로 읽히게 */
+const STAMP_MIN_PX = 50;
+/** 도장 테 바깥 반지름 ÷ 그림 폭(fx.stamp 300 기준 바깥 원 141) */
+const STAMP_R = 0.47;
+/** 도장 글자 모양 */
+const STAMP_STYLE = { fontFamily: FONT_STACK, fontSize: 80, lineHeight: 78, align: 'center' as const, fill: FX.stamp.color, stroke: { color: '#ffffff', width: 9, join: 'round' as const }, letterSpacing: -2 };
+/** 말풍선 글자 모양 */
+const BUBBLE_STYLE = { fontFamily: FONT_STACK, fontSize: 30, fill: '#5c3a1a' };
+/** 새 거래처 알약 글자 모양 */
+const FS_NAME = { fontFamily: FONT_STACK, fontSize: 30, fill: '#5c3a1a' };
+const FS_TAG = { fontFamily: FONT_STACK, fontSize: 24, fill: '#ffffff', stroke: { color: '#e0553a', width: 6, join: 'round' as const } };
+/** 새 거래처 알약 치우기: 캐시 글자는 떼어 두고 나머지만 부숨 */
+function dropPill(p: Container): void {
+  if (p.destroyed) return;
+  detachCached(p);
+  p.destroy({ children: true });
 }
 /** grade 별 최소 히트스톱(ms) */
 const HITSTOP_FLOOR = [0, 30, 45, 90, 120];
@@ -97,8 +139,9 @@ export class LunchView implements LunchEvents {
   private touchG = new Graphics();
   private darkHole: Sprite | null = null;
   private darkG: Graphics | null = null;
-  private cars: { sp: Sprite; r: { ax: 'h' | 'v'; x: number; y: number; dir: 1 | -1 }; v: number; off: number; key: string }[] = [];
-  private walkers: { sp: Sprite; ax: 'h' | 'v'; fixed: number; pos: number; dir: 1 | -1; v: number; key: string; ph: number }[] = [];
+  /** 차·보행자: 곡선 길(차선·보도 선)을 길이 s 로 따라감 */
+  private cars: { sp: Sprite; path: MapPt[]; cum: number[]; s: number; dir: 1 | -1; v: number; key: string; ax: 'h' | 'v' | ''; sd: number }[] = [];
+  private walkers: { sp: Sprite; path: MapPt[]; cum: number[]; s: number; dir: 1 | -1; v: number; key: string; ph: number; ka: string; kb: string; fr: string }[] = [];
   private cloudsS: { sp: Sprite; v: number }[] = [];
   private petals: { sp: Sprite; x: number; y: number; vx: number; vy: number; vr: number; ph: number }[] = [];
   private glints: { sp: Sprite; ph: number }[] = [];
@@ -118,22 +161,88 @@ export class LunchView implements LunchEvents {
   private bubbleCool = 0;
   private persuadeCool = 0;
   private slowCool = 0;
-  quality: 'high' | 'low' = 'high';
+  /** 화질 등급 예산(설계서 7장 9·10): 연출 개수만 줄이고 규칙·수치는 그대로 */
+  private bud: TierBudget;
+  /* 매 프레임 다시 쓰는 임시 값(설계서 7장 11: 새 객체 줄이기) */
+  private tmpA = new Point();
+  private tmpB = new Point();
+  private pillBuf: { tv: TV; x: number; y: number }[] = [];
+  private liveFx = new Set<number>();
+  private avoidBuf: KeepOut[] = [];
+  private stampMax(): number {
+    return Math.min(FX.stamp.maxOnScreen, this.bud.stamps);
+  }
+  /** 영업 중 화질이 바뀜(자동 낮춤): 바로 줄일 수 있는 것만 — 파티클·숫자·도장·필터·흔들림. 차·보행자 수는 다음 영업일부터 */
+  applyBudget(b: TierBudget): void {
+    this.bud = b;
+    this.parts.budget = Math.min(FX.budget.particles, b.particles);
+    this.nums.max = Math.min(FX.budget.numbers, b.numbers);
+    this.camera.maxWaves = Math.min(FX.budget.filtersMax, b.waves);
+    this.camera.shakeK = b.shake;
+    if (!b.ambient) for (const g of this.glints) g.sp.alpha = 0.5;
+  }
+
+  /**
+   * 와이프가 덮고 있는 동안 미리 그려 둠(설계서 7장 · 7-추가 로딩): 첫 계약·첫 새 거래처·첫 말풍선 프레임에 생기던 긴 작업
+   * (글자 텍스처 만들기·그림 첫 GPU 업로드·셰이더 준비)을 영업 시작 전으로 옮긴다. 작은 렌더 타깃에 몇 개씩 나눠 그린다.
+   * 글자는 textcache 에 남아 다음 영업일에도 그대로 쓴다(두 번째 영업일부터는 거의 할 일 없음)
+   */
+  async warm(renderer: Renderer): Promise<void> {
+    const rt = RenderTexture.create({ width: 8, height: 8 });
+    const box = new Container();
+    const own: Container[] = [];
+    const draw = (objs: Container[]) => {
+      for (const o of objs) box.addChild(o);
+      try {
+        renderer.render({ container: box, target: rt, clear: true });
+      } catch {
+        /* 무시 */
+      }
+      detachCached(box);
+      box.removeChildren();
+    };
+    try {
+      /* 지도 전체(바닥·도로 큰 텍스처 업로드, 스프라이트·그래픽 셰이더) */
+      try {
+        renderer.render({ container: this.root, target: rt, clear: true });
+      } catch {
+        /* 무시 */
+      }
+      await breath();
+      const ts = unlockedTargets();
+      const texts: Container[] = [takeText('stamp', String(FX.stamp.text).replace(' ', '\n'), STAMP_STYLE), takeText('fs-tag', FX.firstSeen.label, FS_TAG)];
+      for (const t of ts) texts.push(takeText('bubble', `${t.name} 계약!`, BUBBLE_STYLE), takeText('fs-name', `${t.name} · ${t.sizeLabel}`, FS_NAME));
+      const bt = [new BitmapText({ text: '+0123456789원', style: { fontFamily: NUM_FONT, fontSize: NUM_BASE } }), new BitmapText({ text: 'LEVEL UP! 대박', style: { fontFamily: EV_FONT, fontSize: EV_BASE } })];
+      const sp = [new Sprite(circle()), new Sprite(pill())];
+      own.push(...bt, ...sp);
+      draw([...bt, ...sp]);
+      /* 그림 묶음(아틀라스)은 art.loadAll 이 이미 GPU 에 올려 둠 */
+      for (let i = 0; i < texts.length; i += 3) {
+        draw(texts.slice(i, i + 3));
+        await breath();
+      }
+    } finally {
+      for (const o of own) o.destroy();
+      box.destroy();
+      rt.destroy(true);
+    }
+  }
 
   constructor(map: MapLayers, ground: Texture, roads: Texture, public hud: HudHooks) {
     this.map = map;
     this.lot = map.lot;
     this.portK = map.lot / 129;
     this.dark = !!DISTRICT_BY[map.district].mod.dark;
-    this.quality = S.settings.quality;
-    this.parts = new Particles(this.quality === 'low' ? 260 : FX.budget.particles);
-    this.nums = new Numbers(FX.budget.numbers);
+    this.bud = budget();
+    this.parts = new Particles(Math.min(FX.budget.particles, this.bud.particles));
+    this.nums = new Numbers(Math.min(FX.budget.numbers, this.bud.numbers));
     this.nums.scale = map.orient === 'port' ? FX.number.portScale : 1;
     this.nums.merge = S.settings.mergeNumbers;
-    this.nums.bounds = { x0: 0, x1: map.W, y0: map.area.y - 10 };
+    this.nums.bounds = { x0: 0, x1: map.W, y0: map.area.y - 10, y1: map.H };
     this.camera = new Camera();
     this.camera.reduce = S.settings.reduceShake;
-    this.camera.maxWaves = this.quality === 'low' ? 0 : view.w < 700 || navigator.maxTouchPoints > 0 ? FX.budget.filtersMaxMobile : FX.budget.filtersMax;
+    this.camera.maxWaves = Math.min(FX.budget.filtersMax, this.bud.waves);
+    this.camera.shakeK = this.bud.shake;
     const Ls = this.L;
     this.root.addChild(this.camera.cam);
     /* 도장은 숫자 아래(금액이 도장에 덮이지 않게), 말풍선·새 거래처 알약은 맨 위 */
@@ -151,8 +260,8 @@ export class LunchView implements LunchEvents {
       r.height = map.H;
       Ls.roads.addChild(r);
     }
-    /* 장식 */
-    for (const d of map.decor) {
+    /* 장식: 생성 지도는 바닥 텍스처에 구워 넣음(설계서 5-5). 옛 고정 지도만 스프라이트로 */
+    if (!map.streets) for (const d of map.decor) {
       const sp = new Sprite(T(d.svgId));
       sp.anchor.set(0.5, 1);
       const side = this.lot * d.s * 1.1;
@@ -191,39 +300,35 @@ export class LunchView implements LunchEvents {
   private initAmbient(): void {
     const m = this.map;
     const pk = this.portK;
-    const nCars = this.quality === 'low' ? 3 : 6;
-    for (let i = 0; i < nCars; i++) {
+    const nCars = this.bud.cars;
+    for (let i = 0; i < nCars && m.routes.length; i++) {
       const rt = m.routes[i % m.routes.length];
       const dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1;
       const key = `a.car${i % 4}`;
       const sp = new Sprite(T(`${key}@${rt.ax}`));
       sp.anchor.set(0.5);
       sp.scale.set(pk);
-      if (dir < 0) sp.scale.set(rt.ax === 'h' ? -pk : pk, rt.ax === 'v' ? -pk : pk);
-      const a = rt.pts[0];
-      const b = rt.pts[1];
-      const t0 = Math.random();
-      const off = m.road * 0.17 * dir;
-      const car = { sp, r: { ax: rt.ax, x: rt.ax === 'h' ? a.x + (b.x - a.x) * t0 : a.x + off, y: rt.ax === 'v' ? a.y + (b.y - a.y) * t0 : a.y + off, dir }, v: (70 + Math.random() * 60) * m.U, off, key };
-      this.cars.push(car);
+      /* 오른쪽 차선(진행 방향 오른쪽으로 0.17 도로 폭) */
+      const path = offsetLine(rt.pts, m.road * 0.17 * dir);
+      const cum = cumLen(path);
+      this.cars.push({ sp, path, cum, s: Math.random() * cum[cum.length - 1], dir, v: (70 + Math.random() * 60) * m.U, key, ax: '', sd: 0 });
       this.L.actors.addChild(sp);
     }
-    const nW = this.quality === 'low' ? 4 : 8;
-    for (let i = 0; i < nW; i++) {
-      const rd = m.roads[i % m.roads.length];
+    const nW = this.bud.walkers;
+    const walks = (m.streets || []).filter((s) => !s.stub);
+    for (let i = 0; i < nW && walks.length; i++) {
+      const st = walks[i % walks.length];
       const side = i % 2 ? 1 : -1;
-      const walk = m.lot * 0.05;
-      const ax = rd.ax;
-      const fixed = ax === 'h' ? rd.y + rd.h / 2 + side * (rd.h / 2 - walk) : rd.x + rd.w / 2 + side * (rd.w / 2 - walk);
-      const len = ax === 'h' ? m.W : m.H;
+      const path = offsetLine(st.pts, side * st.w * 0.41);
+      const cum = cumLen(path);
       const key = `a.walker${i % 4}`;
       const sp = new Sprite(T(`${key}@a`));
       sp.anchor.set(0.5, 1);
       sp.scale.set(pk * 0.95);
-      this.walkers.push({ sp, ax, fixed, pos: Math.random() * len, dir: Math.random() < 0.5 ? 1 : -1, v: (22 + Math.random() * 14) * m.U, key, ph: Math.random() * 6 });
+      this.walkers.push({ sp, path, cum, s: Math.random() * cum[cum.length - 1], dir: Math.random() < 0.5 ? 1 : -1, v: (22 + Math.random() * 14) * m.U, key, ph: Math.random() * 6, ka: `${key}@a`, kb: `${key}@b`, fr: 'a' });
       this.L.actors.addChild(sp);
     }
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < this.bud.cloudShadows; i++) {
       const sp = new Sprite(T('a.cloudShadow'));
       sp.anchor.set(0.5);
       sp.scale.set(1.6 * pk + i * 0.4);
@@ -233,7 +338,7 @@ export class LunchView implements LunchEvents {
     }
     const dmod = DISTRICT_BY[m.district].mod;
     if (dmod.spark) {
-      for (let i = 0; i < 16; i++) {
+      for (let i = 0; i < (this.bud.ambient ? 16 : 0); i++) {
         const sp = new Sprite(T('fx.petal'));
         sp.anchor.set(0.5);
         sp.scale.set(pk * (0.8 + Math.random() * 0.6));
@@ -257,31 +362,38 @@ export class LunchView implements LunchEvents {
   }
   private updateAmbient(dt: number): void {
     const m = this.map;
+    const pk = this.portK;
     for (const c of this.cars) {
-      const lo = -120;
-      if (c.r.ax === 'h') {
-        c.r.x += c.r.dir * c.v * dt;
-        if (c.r.x > m.W + 120 || c.r.x < lo) c.r.x = c.r.dir > 0 ? lo : m.W + 120;
-      } else {
-        c.r.y += c.r.dir * c.v * dt;
-        if (c.r.y > m.H + 120 || c.r.y < lo) c.r.y = c.r.dir > 0 ? lo : m.H + 120;
+      const len = c.cum[c.cum.length - 1];
+      c.s += c.dir * c.v * dt;
+      if (c.s > len + 60) c.s = -60;
+      if (c.s < -60) c.s = len + 60;
+      const p = poseAt(c.path, c.cum, c.s, AMB);
+      const ax = roadAxis(p.tx * c.dir, p.ty * c.dir, c.ax || 'h');
+      if (ax.ax !== c.ax || ax.d !== c.sd) {
+        c.ax = ax.ax;
+        c.sd = ax.d;
+        c.sp.texture = T(`${c.key}@${ax.ax}`);
+        c.sp.scale.set(ax.ax === 'h' && ax.d < 0 ? -pk : pk, ax.ax === 'v' && ax.d < 0 ? -pk : pk);
       }
-      c.sp.position.set(c.r.x, c.r.y);
-      c.sp.zIndex = c.r.y;
+      c.sp.position.set(p.x, p.y);
+      c.sp.zIndex = p.y;
     }
     for (const w of this.walkers) {
-      const len = w.ax === 'h' ? m.W : m.H;
-      w.pos += w.dir * w.v * dt;
-      if (w.pos > len + 40) w.pos = -40;
-      if (w.pos < -40) w.pos = len + 40;
+      const len = w.cum[w.cum.length - 1];
+      w.s += w.dir * w.v * dt;
+      if (w.s > len + 40) w.s = -40;
+      if (w.s < -40) w.s = len + 40;
       w.ph += dt * 6;
       const frame = Math.sin(w.ph) > 0 ? 'a' : 'b';
-      const k = `${w.key}@${frame}`;
-      w.sp.texture = T(k);
-      const x = w.ax === 'h' ? w.pos : w.fixed;
-      const y = w.ax === 'h' ? w.fixed : w.pos;
+      if (frame !== w.fr) {
+        w.fr = frame;
+        w.sp.texture = T(frame === 'a' ? w.ka : w.kb);
+      }
+      const p = poseAt(w.path, w.cum, w.s, AMB);
+      const x = p.x, y = p.y;
       w.sp.position.set(x, y);
-      w.sp.scale.x = Math.abs(w.sp.scale.y) * (w.dir > 0 ? -1 : 1);
+      w.sp.scale.x = Math.abs(w.sp.scale.y) * (p.tx * w.dir > 0 ? -1 : 1);
       w.sp.zIndex = y;
     }
     for (const c of this.cloudsS) {
@@ -307,27 +419,29 @@ export class LunchView implements LunchEvents {
   /* ── 대상 ── */
   private texFor(tv: TV): string {
     const e = tv.e;
-    const base = `t.${e.t.id}@`;
+    const k = tv.keys;
     if (e.road) {
-      if (e.road.ax === 'v') return base + (e.dir > 0 ? 'down' : 'up');
-      if (tv.state === 'signed') return base + 'happy';
-      return base + (e.hit > 0 ? 'hit' : 'idle');
+      if (e.rax === 'v') return e.rdir > 0 ? k.down : k.up;
+      if (tv.state === 'signed') return k.happy;
+      return e.hit > 0 ? k.hit : k.idle;
     }
-    if (tv.state === 'signed') return base + 'happy';
-    if (e.hit > 0) return base + 'hit';
+    if (tv.state === 'signed') return k.happy;
+    if (e.hit > 0) return k.hit;
     /* 가끔 눈 깜빡임(그림 모듈의 t.<id>@blink 가 있을 때만) */
-    if (tv.state === 'live' && (this.rt + tv.ph * 0.9) % 3.4 < 0.13 && blinkOk(e.t.id)) return base + 'blink';
-    return base + 'idle';
+    if (tv.state === 'live' && (this.rt + tv.ph * 0.9) % 3.4 < 0.13 && blinkOk(e.t.id)) return k.blink;
+    return k.idle;
   }
   spawn(e: Ent, initial: boolean): void {
     const body = new Container();
-    const key = `t.${e.t.id}@${e.road && e.road.ax === 'v' ? (e.dir > 0 ? 'down' : 'up') : 'idle'}`;
+    const key = `t.${e.t.id}@${e.road && e.rax === 'v' ? (e.rdir > 0 ? 'down' : 'up') : 'idle'}`;
     const spr = new Sprite(T(key));
     spr.anchor.set(0.5, 0.8);
     const add = new Sprite(spr.texture);
     add.anchor.set(0.5, 0.8);
     add.blendMode = 'add';
     add.alpha = 0;
+    /* 번쩍일 때만 보임(alpha 0 이어도 add 스프라이트는 대상마다 그리기를 끊음, 설계서 7장 6) */
+    add.visible = false;
     body.addChild(spr, add);
     const box = e.w;
     const shadow = new Sprite(T('o.shadow'));
@@ -337,7 +451,7 @@ export class LunchView implements LunchEvents {
     const tv: TV = {
       e, body, spr, add, shadow, gauge: null, box, appear: 0, delay: initial ? Math.random() * 0.35 : 0, state: 'live', leaveT: 0, flash: 0, squash: 0,
       hopT: -1, hopFrom: { x: e.x, y: e.y }, sweatT: 0, fleeT: 0, texKey: key, ph: Math.random() * 6.28, clock: null, wmark: null, crown: null, lights: [],
-      pill: null, pillT: 0, pillHW: 0, arrow: null, arrowT: 0, dx: e.x, dy: e.y, popped: false,
+      pill: null, pillT: 0, pillHW: 0, arrow: null, arrowT: 0, dx: e.x, dy: e.y, popped: false, keys: keysOf(e.t.id),
     };
     body.visible = false;
     shadow.visible = false;
@@ -417,7 +531,7 @@ export class LunchView implements LunchEvents {
       const p = tv.pill;
       tv.pill = null;
       killDeep(p);
-      gsap.to(p, { alpha: 0, duration: 0.2, onComplete: () => p.destroy({ children: true }) });
+      gsap.to(p, { alpha: 0, duration: 0.2, onComplete: () => dropPill(p) });
     }
     if (tv.arrow) {
       tv.arrow.destroy();
@@ -465,32 +579,50 @@ export class LunchView implements LunchEvents {
     }
     /* 보스 계약 도장만 보이게 다른 도장은 걷음 */
     if (c.grade >= 4) for (const st of this.stamps.slice()) this.killStamp(st);
-    /* 도장 + 말풍선 */
+    /* 도장 + 말풍선. 숫자는 도장(과 말풍선) 위에 띄워 '영업 성공!' 글자를 덮지 않게 */
+    let stampBox: { top: number; bottom: number } | undefined;
     const onScreen = this.stamps.filter((s) => s.alive).length;
-    if (onScreen < FX.stamp.maxOnScreen || c.grade >= 2) {
-      if (onScreen >= FX.stamp.maxOnScreen) {
+    if (onScreen < this.stampMax() || c.grade >= 2) {
+      if (onScreen >= this.stampMax()) {
         const old = this.stamps.find((s) => s.alive);
         if (old) this.killStamp(old);
       }
-      /* 도장이 많이 떠 있을수록 조금씩 작게(화면이 도장으로 덮이지 않게) */
+      /* 도장이 많이 떠 있을수록 조금씩 작게(화면이 도장으로 덮이지 않게). 단 화면에서 STAMP_MIN_PX 아래로는 안 줄임 */
       const crowdK = Math.max(0.55, 1 - 0.055 * Math.min(onScreen, 7) - 0.012 * Math.min(this.nums.count, 12));
+      const wt = this.L.stamps.worldTransform;
+      const onPx = Math.hypot(wt.a, wt.b) || 1;
+      const texW = T('fx.stamp').width || 300;
+      const sMin = STAMP_MIN_PX / (2 * STAMP_R * texW * 0.64 * onPx);
+      const ss = Math.max(sMin, g.stampScale * pk * (e.boss ? 1.2 : crowdK));
       /* 보스는 도장·숫자를 몸 가운데 아래쪽에(위쪽은 전국 계약 배너 자리) */
-      this.stamp(x, e.boss ? e.y - (tv ? tv.box : e.w) * 0.05 : top + (tv ? tv.box : e.w) * 0.3, g.stampScale * pk * (e.boss ? 1.2 : crowdK));
-      sfx('stamp');
+      let sy = e.boss ? e.y - (tv ? tv.box : e.w) * 0.05 : top + (tv ? tv.box : e.w) * 0.3;
+      const R = STAMP_R * texW * ss * 0.64;
+      /* 화면 위 HUD(재화 알약·초상 등)에 걸리면 그 아래로(폰 가로에서 지도 맨 윗줄 도장이 알약 사이에 끼지 않게) */
+      if (!e.boss) sy = this.belowHud(x, sy, R);
+      if (this.stamp(x, sy, ss, e.boss)) {
+        stampBox = { top: sy - R, bottom: sy + R };
+        sfx('stamp');
+      }
     }
     if (c.grade >= 4) {
       /* 절정(보스 계약): 떠 있는 숫자는 걷고 LEVEL UP 은 미뤄서 전국 계약 배너·도장·보스 숫자만 보이게 */
       climax(2.4);
       this.nums.hush(2.2);
-      banner(g.banner || '대형 계약', `${e.t.name} · ${e.t.sizeLabel}`, '+' + fmt(c.gmv) + '원', true);
-    } else if (c.grade >= 3) {
-      banner(g.banner || '대형 계약', `${e.t.name} · ${e.t.sizeLabel}`, '+' + fmt(c.gmv) + '원');
-    } else if (c.grade >= 1 && this.bubbleCool <= 0) {
-      this.bubble(x, top - 20 * pk, `${e.t.name} 계약!`);
+    } else if (c.grade >= 1 && c.grade < 3 && this.bubbleCool <= 0) {
+      /* 말풍선 꼬리를 도장 테 위에 얹음(글자 자리는 비움) */
+      const b = this.bubble(x, stampBox ? stampBox.top + 14 * pk : top - 20 * pk, `${e.t.name} 계약!`);
+      if (b && stampBox) stampBox.top = Math.min(stampBox.top, b.y - 100 * 0.62 * pk * 1.15);
       this.bubbleCool = 0.3;
     }
-    /* 숫자 */
-    this.nums.gmv(x, e.boss ? e.y + (tv ? tv.box : e.w) * 0.3 : top, c.gmv, c.rev, c.xp, { crit, boss: e.boss, pending: c.pending });
+    /* 숫자: 큰 줄 = 매출, 둘째 줄 = 기술력, 셋째 줄 = 거래액(결제 대기면 대기 금액) */
+    this.nums.deal(x, e.boss ? e.y + (tv ? tv.box : e.w) * 0.3 : top, { rev: c.rev, tech: c.tech, gmv: c.gmv }, { crit, boss: e.boss, pending: c.pending, stamp: stampBox, hero: c.grade >= 3 });
+    if (c.grade >= 3) {
+      /* 배너는 이 계약의 도장·금액 자리를 피해서(지도 위쪽 계약이면 배너가 아래로). 금액은 지도 숫자가 보여 주므로 배너에는 이름만 */
+      const clear = this.clearBand(x, stampBox ? stampBox.top : top, stampBox ? stampBox.bottom : e.y);
+      banner(g.banner || '대형 계약', `${e.t.name} · ${e.t.sizeLabel}`, undefined, c.grade >= 4, clear);
+      /* 대형 계약 배너가 떠 있는 동안 LEVEL UP 큰 글자는 잠깐 미룸(배너·금액·새 거래처 알약과 한 화면에 겹치지 않게) */
+      if (c.grade < 4) holdLevelUp(1.6);
+    }
     /* 링·쇼크웨이브·파티클 */
     gsap.delayedCall(0.06, () => {
       g.rings.forEach((r, i) => this.ring(x, e.y - (tv ? tv.box : e.w) * 0.3, r * this.lot, 0.45 + i * 0.12, i * 0.08, 0xfff4c4, 1, c.grade >= 3));
@@ -498,22 +630,26 @@ export class LunchView implements LunchEvents {
         const gp = this.L.stamps.toGlobal({ x, y: e.y - (tv ? tv.box : e.w) * 0.3 });
         this.camera.shockwave(gp.x, gp.y, c.grade >= 4 ? 1.8 : c.grade >= 3 ? 1.3 : 0.9);
       }
-      const nT = Math.round(g.tickets * (this.quality === 'low' ? 0.5 : 1));
-      const nC = Math.round(g.coins * (this.quality === 'low' ? 0.5 : 1));
+      const nT = Math.round(g.tickets * this.bud.burst);
+      const nC = Math.round(g.coins * this.bud.burst);
       const cy = e.y - (tv ? tv.box : e.w) * 0.35;
       this.parts.burst(T('fx.ticket'), x, cy, nT, { spMin: 90 * pk, spMax: 320 * pk, g: 620 * pk, life: 0.8, s0: 0.75 * pk, s1: 0.45 * pk, up: 120 * pk });
       this.parts.burst(T('fx.coin'), x, cy, nC, { spMin: 90 * pk, spMax: 300 * pk, g: 620 * pk, life: 0.8, s0: 0.8 * pk, s1: 0.5 * pk, up: 140 * pk });
       this.parts.burst(T('fx.spark'), x, cy, 4 + c.grade * 3, { spMin: 60 * pk, spMax: 260 * pk, life: 0.45, s0: 0.9 * pk, s1: 0.1, up: 0, blend: 'add' });
       if (crit) this.parts.burst(T('fx.star'), x, cy, 8, { spMin: 120 * pk, spMax: 340 * pk, g: 500 * pk, life: 0.8, s0: 0.6 * pk, s1: 0.2, up: 160 * pk });
     });
-    /* 0.25초~: HUD 로 날아감 */
-    const flyT = Math.min(10, 1 + Math.floor(c.grade * 1.6) + (crit ? 1 : 0));
-    const flyC = Math.min(6, 1 + c.grade);
+    /* 0.25초~: HUD 로 날아감 — 동전(매출) 최대 6 · 톱니(기술력) 최대 3 · 식권(거래액) 최대 2. 계약당 최대 11개 */
+    const flyC = Math.min(6, 1 + c.grade + (crit ? 1 : 0));
+    const flyG = Math.min(3, 1 + Math.floor(c.grade / 2));
+    const flyT = Math.min(2, 1 + (c.grade >= 2 ? 1 : 0));
+    /* 날아가는 식권·코인은 숫자 자리(도장 위)에서 출발 — 도장 글자 위를 지나가지 않게 */
+    const flyY = stampBox && !e.boss ? stampBox.top - 24 * pk : e.y - (tv ? tv.box : e.w) * 0.4;
     gsap.delayedCall(0.25, () => {
-      const from = worldToFx(this.L.stamps, x, e.y - (tv ? tv.box : e.w) * 0.4);
+      const from = worldToFx(this.L.stamps, x, flyY);
       const toT: HudId = c.pending ? this.hud.pendingAnchor() : 'hud.gmv';
-      for (let i = 0; i < flyT; i++) flyCoin('fx.ticket', { x: from.x + (Math.random() - 0.5) * 40, y: from.y + (Math.random() - 0.5) * 30 }, toT, i * 0.03, 0.9);
-      if (c.rev > 0) for (let i = 0; i < flyC; i++) flyCoin('fx.coin', { x: from.x + (Math.random() - 0.5) * 40, y: from.y }, 'hud.revenue', 0.05 + i * 0.03, 0.9);
+      if (c.rev > 0) for (let i = 0; i < flyC; i++) flyCoin('fx.coin', { x: from.x + (Math.random() - 0.5) * 40, y: from.y }, 'hud.revenue', i * 0.03, 0.9);
+      if (c.tech > 0) for (let i = 0; i < flyG; i++) flyCoin('ic.tech', { x: from.x + (Math.random() - 0.5) * 40, y: from.y }, 'hud.tech', 0.06 + i * 0.04, 0.55);
+      for (let i = 0; i < flyT; i++) flyCoin('fx.ticket', { x: from.x + (Math.random() - 0.5) * 40, y: from.y + (Math.random() - 0.5) * 30 }, toT, 0.12 + i * 0.05, 0.75);
     });
     if (c.grade >= 3) {
       this.hud.portrait('cheer');
@@ -528,7 +664,101 @@ export class LunchView implements LunchEvents {
     }
   }
 
-  private stamp(x: number, y: number, s: number): void {
+  /** 배너가 가리면 안 되는 세로 띠들(fxTop 좌표): 도장(y0~y1, 도장 좌표) · 방금 띄운 금액 덩어리(떠오를 만큼 위로 여유). 따로 두어 배너가 둘 사이에도 설 수 있게 */
+  private clearBand(x: number, y0: number, y1: number): { y0: number; y1: number }[] {
+    const band = (a0: number, a1: number) => {
+      const a = worldToFx(this.L.nums, x, a0);
+      const b = worldToFx(this.L.nums, x, a1);
+      return { y0: Math.min(a.y, b.y), y1: Math.max(a.y, b.y) };
+    };
+    const out = [band(y0 - 20 * this.portK, y1 + 10 * this.portK)];
+    const nb = this.nums.lastBox;
+    if (nb) out.push(band(nb.y0 - 45 * this.portK, nb.y1 + 10 * this.portK));
+    return out;
+  }
+  /**
+   * 화면 위·아래 DOM HUD(재화 알약·레벨·타이머·매칭·초상·보스 게이지·스킬 칸·사무실로)의 자리(숫자 좌표).
+   * DOM 자리(화면 px)는 HUD 배치가 바뀔 때(레이아웃·보스 게이지·결제 대기 알약, hudVersion)만 다시 잰다 — getBoundingClientRect 가
+   * 레이아웃을 강제하므로(설계서 7장 3). 안전망 2초. 숫자 좌표로 바꾸는 계산은 프레임마다(흔들림·줌 반영).
+   */
+  private hudScreen: { at: number; v: number; rects: { l: number; t: number; r: number; b: number }[] } = { at: -1e9, v: -1, rects: [] };
+  private hudLocal: { rt: number; rects: KeepOut[] } = { rt: -1, rects: [] };
+  /** 지난 변환(a b c d tx ty · 화면 자리 잰 시각) */
+  private hudKey = [NaN, NaN, NaN, NaN, NaN, NaN, NaN];
+  private hudRects(): KeepOut[] {
+    const now = performance.now();
+    const hs = this.hudScreen;
+    if (hs.v !== hudVersion() || now - hs.at > 2000) {
+      const out: { l: number; t: number; r: number; b: number }[] = [];
+      const sel = '#lunch .lhud .cur, #lunch .lhud .lvl, #lunch .lhud .timer, #lunch .lhud .match, #lunch .lhud .pend, #lunch .lhud .dname, #lunch .lportrait, #lunch .bossbar.on, #lunch .slots .slot, #lunch .endbtn';
+      for (const el of Array.from(document.querySelectorAll<HTMLElement>(sel))) {
+        if (el.offsetParent === null) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width < 1 || r.height < 1) continue;
+        out.push({ l: r.left, t: r.top, r: r.right, b: r.bottom });
+      }
+      this.hudScreen = { at: now, v: hudVersion(), rects: out };
+      this.hudLocal.rt = -1;
+    }
+    if (this.hudLocal.rt === this.rt) return this.hudLocal.rects;
+    /* 화면 → 숫자 좌표 변환이 그대로면(흔들림·줌 없음) 지난 값 그대로 */
+    const wt = this.L.nums.worldTransform;
+    const hk = this.hudKey;
+    if (hk[0] === wt.a && hk[1] === wt.b && hk[2] === wt.c && hk[3] === wt.d && hk[4] === wt.tx && hk[5] === wt.ty && hk[6] === this.hudScreen.at) {
+      this.hudLocal.rt = this.rt;
+      return this.hudLocal.rects;
+    }
+    hk[0] = wt.a;
+    hk[1] = wt.b;
+    hk[2] = wt.c;
+    hk[3] = wt.d;
+    hk[4] = wt.tx;
+    hk[5] = wt.ty;
+    hk[6] = this.hudScreen.at;
+    const rects = this.hudLocal.rects;
+    const src = this.hudScreen.rects;
+    rects.length = src.length;
+    for (let i = 0; i < src.length; i++) {
+      const r = src[i];
+      const p0 = this.L.nums.toLocal(this.tmpA.set(r.l, r.t), undefined, this.tmpB);
+      const x0 = p0.x;
+      const y0 = p0.y;
+      const p1 = this.L.nums.toLocal(this.tmpA.set(r.r, r.b), undefined, this.tmpB);
+      const o = rects[i] || (rects[i] = { x0: 0, x1: 0, y0: 0, y1: 0 });
+      o.x0 = Math.min(x0, p1.x);
+      o.x1 = Math.max(x0, p1.x);
+      o.y0 = Math.min(y0, p1.y);
+      o.y1 = Math.max(y0, p1.y);
+    }
+    this.hudLocal.rt = this.rt;
+    return rects;
+  }
+  /** 도장(가운데 x,y · 반지름 R)이 화면 위쪽 HUD 에 걸리면 걸리지 않는 높이까지 내림 */
+  private belowHud(x: number, y: number, R: number): number {
+    const mid = this.map.area.y + this.map.area.h * 0.5;
+    for (let pass = 0; pass < 3; pass++) {
+      let moved = false;
+      for (const h of this.hudRects()) {
+        if (h.y1 > mid) continue;
+        if (x + R > h.x0 && x - R < h.x1 && y - R < h.y1 && y + R > h.y0) {
+          y = h.y1 + R + 2;
+          moved = true;
+        }
+      }
+      if (!moved) break;
+    }
+    return y;
+  }
+  /** 도장 찍기. 보스 도장이 떠 있는 동안 그 위에 겹칠 도장은 찍지 않음(false) */
+  private stamp(x: number, y: number, s: number, boss = false): boolean {
+    const texW = T('fx.stamp').width || 300;
+    const R = STAMP_R * texW * s * 0.64;
+    if (!boss) {
+      for (const o of this.stamps) {
+        if (!o.alive || !o.boss) continue;
+        if (Math.hypot(o.x - x, o.y - y) < (R + STAMP_R * texW * o.s * 0.64) * 0.95) return false;
+      }
+    }
     let st = this.stampFree.pop();
     if (!st) {
       const c = new Container();
@@ -536,10 +766,17 @@ export class LunchView implements LunchEvents {
       ink.anchor.set(0.5);
       const ring = new Sprite(T('fx.stamp'));
       ring.anchor.set(0.5);
-      const txt = new Text({ text: String(FX.stamp.text).replace(' ', '\n'), style: { fontFamily: FONT_STACK, fontSize: 80, lineHeight: 78, align: 'center', fill: FX.stamp.color, stroke: { color: '#ffffff', width: 9, join: 'round' }, letterSpacing: -2 } });
+      /* 도장 글자는 영업일이 바뀌어도 같은 글자 텍스처를 다시 씀(textcache) — 첫 계약 프레임에 글자를 새로 그리지 않게 */
+      const txt = takeText('stamp', String(FX.stamp.text).replace(' ', '\n'), STAMP_STYLE);
       txt.anchor.set(0.5);
       c.addChild(ink, ring, txt);
       st = { c, ink, ring, txt, t: 0, s: 1, rot: 0, x, y, alive: true };
+    }
+    /* 새 도장과 반 넘게 겹치는 먼저 찍힌 도장은 바로 흐려지기 시작(도장끼리 겹쳐 글자가 가려지지 않게) */
+    for (const o of this.stamps) {
+      if (!o.alive || o.boss) continue;
+      const Ro = STAMP_R * texW * o.s * 0.64;
+      if (Math.hypot(o.x - x, o.y - y) < (R + Ro) * 0.75) o.t = Math.max(o.t, FX.stamp.inSec + FX.stamp.holdSec);
     }
     st.t = 0;
     st.s = s;
@@ -547,10 +784,12 @@ export class LunchView implements LunchEvents {
     st.x = x;
     st.y = y;
     st.alive = true;
+    st.boss = boss;
     st.c.visible = true;
     st.c.alpha = 0;
     this.L.stamps.addChild(st.c);
     this.stamps.push(st);
+    return true;
   }
   private killStamp(st: Stamp): void {
     st.alive = false;
@@ -592,20 +831,33 @@ export class LunchView implements LunchEvents {
       st.ink.scale.set(1 + Math.min(0.12, (t - S0.inSec) * 0.5));
     }
   }
-  private bubble(x: number, y: number, text: string): void {
+  /**
+   * 말풍선 글자 캐시: 글자(대상 이름)마다 Text 를 한 번만 래스터해 두고 돌려 씀 — 계약마다 글자를 다시 그려 텍스처를 올리던 것
+   * (긴 프레임의 한 원인, 설계서 7장 6). 같은 글자가 동시에 두 말풍선에 뜨면 하나 더 만듦
+   */
+  private bubbleText(text: string): Text {
+    /* 영업일 사이에도 남는 캐시(textcache): 대상 이름 21종 */
+    const t = takeText('bubble', text, BUBBLE_STYLE);
+    t.anchor.set(0.5);
+    return t;
+  }
+  private bubble(x: number, y: number, text: string): Bubble | null {
     let b = this.bubbles.find((q) => !q.alive);
     if (!b) {
-      if (this.bubbles.length >= 4) return;
+      if (this.bubbles.length >= 4) return null;
       const c = new Container();
       const bg = new NineSliceSprite({ texture: T('fx.bubble'), leftWidth: 40, topHeight: 36, rightWidth: 40, bottomHeight: 44 });
-      const txt = new Text({ text: '', style: { fontFamily: FONT_STACK, fontSize: 30, fill: '#5c3a1a' } });
-      txt.anchor.set(0.5);
-      c.addChild(bg, txt);
-      b = { c, bg, txt, t: 0, alive: true, x, y };
+      c.addChild(bg);
+      b = { c, bg, txt: this.bubbleText(text), t: 0, alive: true, x, y };
+      c.addChild(b.txt);
       this.bubbles.push(b);
       this.L.labels.addChild(c);
     }
-    b.txt.text = text;
+    if (b.txt.text !== text || b.txt.destroyed) {
+      releaseText(b.txt);
+      b.txt = this.bubbleText(text);
+    }
+    if (b.txt.parent !== b.c) b.c.addChild(b.txt);
     const w = Math.max(160, b.txt.width + 70);
     b.bg.width = w;
     b.bg.height = 100;
@@ -617,6 +869,47 @@ export class LunchView implements LunchEvents {
     /* 맨 윗줄 대상: 말풍선이 HUD 띠(지도 영역 위)로 올라가 잘리지 않게 */
     b.y = Math.max(y, this.map.area.y + 110 * this.portK);
     b.c.visible = true;
+    return b;
+  }
+  /** 숫자가 비킬 자리: 떠 있는 도장(글자가 보이는 동안)·말풍선·화면 위 큰 계약 배너 */
+  private updateAvoid(): void {
+    const A = this.avoidBuf;
+    let n = 0;
+    const put = (x0: number, x1: number, y0: number, y1: number, up: boolean, boss: boolean, ban: boolean): void => {
+      const o = A[n] || (A[n] = { x0: 0, x1: 0, y0: 0, y1: 0 });
+      o.x0 = x0;
+      o.x1 = x1;
+      o.y0 = y0;
+      o.y1 = y1;
+      o.up = up;
+      o.boss = boss;
+      o.banner = ban;
+      n++;
+    };
+    const S0 = FX.stamp;
+    const texW = T('fx.stamp').width || 300;
+    for (const st of this.stamps) {
+      if (!st.alive || st.t > S0.inSec + S0.holdSec + S0.outSec * 0.5) continue;
+      const R = STAMP_R * texW * st.s * 0.64;
+      const y = st.c.position.y;
+      put(st.x - R, st.x + R, y - R, y + R, true, !!st.boss, false);
+    }
+    for (const b of this.bubbles) {
+      if (!b.alive || b.t > 0.85) continue;
+      const k = 0.62 * this.portK;
+      const hw = (b.bg.width * k) / 2;
+      const y = b.c.position.y;
+      put(b.x - hw, b.x + hw, y - 100 * k, y - 20 * k, true, false, false);
+    }
+    for (const r of bannerRects(true)) {
+      const p0 = this.L.nums.toLocal({ x: r.x0, y: r.y0 });
+      const p1 = this.L.nums.toLocal({ x: r.x1, y: r.y1 });
+      put(Math.min(p0.x, p1.x), Math.max(p0.x, p1.x), Math.min(p0.y, p1.y), Math.max(p0.y, p1.y), false, false, true);
+    }
+    /* DOM HUD 밑(재화 알약·스킬 칸 등)에 숫자가 깔리지 않게 */
+    for (const h of this.hudRects()) put(h.x0, h.x1, h.y0, h.y1, false, false, false);
+    A.length = n;
+    this.nums.avoid = A;
   }
   private updateBubbles(dt: number): void {
     for (const b of this.bubbles) {
@@ -626,6 +919,8 @@ export class LunchView implements LunchEvents {
       if (t > 1.1) {
         b.alive = false;
         b.c.visible = false;
+        /* 글자는 캐시로 돌려줌(다른 말풍선이 같은 글자를 쓸 수 있게) */
+        if (b.txt.parent === b.c) b.c.removeChild(b.txt);
         continue;
       }
       const k = Math.min(1, t * 8);
@@ -736,7 +1031,7 @@ export class LunchView implements LunchEvents {
       ring.anchor.set(0.5);
       c.addChild(ring);
       const parts: Sprite[] = [ring];
-      const nt = this.quality === 'low' ? 6 : 12;
+      const nt = Math.max(6, Math.round(12 * this.bud.burst));
       for (let i = 0; i < nt; i++) {
         const t = new Sprite(T('fx.qrTile'));
         t.anchor.set(0.5);
@@ -873,13 +1168,13 @@ export class LunchView implements LunchEvents {
   private reward(x: number, y: number, r: Reward): void {
     const from = worldToFx(this.L.stamps, x, y);
     if (r.rev) {
-      this.nums.text(x, y, '+' + fmt(r.rev), 0xffe9a8, 30);
+      this.nums.text(x, y, '+' + fmt(r.rev) + '원', 0xffe9a8, 30);
       for (let i = 0; i < 6; i++) flyCoin('fx.coin', { x: from.x + (Math.random() - 0.5) * 50, y: from.y }, 'hud.revenue', i * 0.04, 1);
     }
-    if (r.point) {
+    if (r.tech) {
       const ev = FX.eventText.point as [string, string, number];
-      this.nums.text(x, y - (r.rev ? 50 : 0), ev[0].replace('N', String(r.point)), hex(ev[1]), ev[2] * 1.2);
-      for (let i = 0; i < Math.min(5, r.point); i++) flyCoin('fx.point', from, 'hud.point', i * 0.05, 1);
+      this.nums.text(x, y - (r.rev ? 50 : 0), ev[0].replace('N', fmt(r.tech)), hex(ev[1]), ev[2] * 1.2);
+      for (let i = 0; i < 4; i++) flyCoin('ic.tech', from, 'hud.tech', i * 0.05, 0.6);
       sfx('point_get');
     }
     if (r.xp) this.nums.text(x, y + 40 * this.portK, '+' + fmt(r.xp), 0x9fe0a8, 22);
@@ -908,24 +1203,24 @@ export class LunchView implements LunchEvents {
     this.ring(it.x, it.y, 60 * this.portK, 0.4, 0, 0xffffff);
     if (!isNew) {
       const ev = FX.eventText.point as [string, string, number];
-      this.nums.text(it.x, it.y - 30, ev[0].replace('N', String(F.ITEM.dupPoint)), hex(ev[1]), ev[2]);
+      this.nums.text(it.x, it.y - 30, ev[0].replace('N', fmt(this.lunch.dupTech())), hex(ev[1]), ev[2]);
       sfx('point_get');
     }
     this.hud.itemGet(it.item, isNew);
   }
-  point(x: number, y: number, n: number, per10: boolean): void {
+  tech(x: number, y: number, n: number, per10: boolean): void {
     const ev = (per10 ? FX.eventText.per10 : FX.eventText.point) as [string, string, number];
-    this.nums.text(x, y, ev[0].replace('N', String(n)), hex(ev[1]), ev[2]);
+    this.nums.text(x, y, ev[0].replace('N', fmt(n)), hex(ev[1]), ev[2]);
     const from = worldToFx(this.L.stamps, x, y);
-    flyCoin('fx.point', from, 'hud.point', 0.2, 1);
+    flyCoin('ic.tech', from, 'hud.tech', 0.2, 0.6);
     sfx('point_get');
   }
   levelUp(lv: number, gained: number): void {
     this.rGold = 0.35;
     this.hud.levelUp(lv, gained);
   }
-  pendingRelease(gmv: number): void {
-    this.hud.pendingRelease(gmv);
+  pendingRelease(gmv: number, comm: number): void {
+    this.hud.pendingRelease(gmv, comm);
   }
   matchUp(step: number, M: number): void {
     this.hud.matchUp(step, M);
@@ -940,7 +1235,10 @@ export class LunchView implements LunchEvents {
     const gp = this.L.stamps.toGlobal({ x: e.x, y: e.y });
     this.camera.shockwave(gp.x, gp.y, 2);
     const ev = FX.eventText.boss as [string, string, number];
-    banner(ev[0], e.t.sizeLabel);
+    const box = tv ? tv.box : e.w;
+    const a = worldToFx(this.L.stamps, e.x, e.y - box * 1.1);
+    const b = worldToFx(this.L.stamps, e.x, e.y + box * 0.2);
+    banner(ev[0], e.t.sizeLabel, undefined, false, { y0: Math.min(a.y, b.y), y1: Math.max(a.y, b.y) });
     sfx('boss_appear');
     this.hud.bossAppear();
     if (tv && tv.crown) {
@@ -955,19 +1253,20 @@ export class LunchView implements LunchEvents {
     if (!tv) return;
     const pk = this.portK;
     const c = new Container();
-    const txt = new Text({ text: `${e.t.name} · ${e.t.sizeLabel}`, style: { fontFamily: FONT_STACK, fontSize: 30, fill: '#5c3a1a' } });
+    /* 글자는 캐시(textcache): 새 거래처가 뜰 때마다 글자 텍스처를 새로 만들지 않게(설계서 7장 6) */
+    const txt = takeText('fs-name', `${e.t.name} · ${e.t.sizeLabel}`, FS_NAME);
     txt.anchor.set(0.5);
     const w = txt.width + 44;
     const bg = new Graphics().roundRect(-w / 2, -26, w, 52, 26).fill(0xfff8ec).stroke({ width: 4, color: 0xffffff });
     const sh = new Graphics().roundRect(-w / 2, -20, w, 52, 26).fill(0x5c3a1a);
-    const tag = new Text({ text: FX.firstSeen.label, style: { fontFamily: FONT_STACK, fontSize: 24, fill: '#ffffff', stroke: { color: '#e0553a', width: 6, join: 'round' } } });
+    const tag = takeText('fs-tag', FX.firstSeen.label, FS_TAG);
     tag.anchor.set(0.5);
     tag.y = -42;
     c.addChild(sh, bg, txt, tag);
     tv.pillHW = Math.max(w, tag.width) / 2;
     c.scale.set(0);
     /* 첫 프레임부터 제자리(등장 지연 중에도 HUD 띠로 올라가지 않게) */
-    const pp = this.pillPos(tv, e.x, e.y);
+    const pp = { ...this.pillPos(tv, e.x, e.y) };
     c.position.set(pp.x, pp.y);
     this.L.labels.addChild(c);
     tv.pill = c;
@@ -984,7 +1283,10 @@ export class LunchView implements LunchEvents {
     if (e.t.grade >= 3) {
       dimScreen(FX.firstSeen.dimBig, 1.2);
       this.camera.punchZoom(FX.firstSeen.zoomBig, e.x, e.y, 0.5);
-      banner(FX.firstSeen.label, `${e.t.name} · ${e.t.sizeLabel}`);
+      /* 배너는 이 대상·알약 자리를 피해서 */
+      const a = worldToFx(this.L.labels, e.x, Math.min(pp.y - 70 * pk, e.y - tv.box));
+      const b = worldToFx(this.L.labels, e.x, Math.max(pp.y + 40 * pk, e.y));
+      banner(FX.firstSeen.label, `${e.t.name} · ${e.t.sizeLabel}`, undefined, false, { y0: Math.min(a.y, b.y), y1: Math.max(a.y, b.y) });
     }
   }
   tick(sec: number): void {
@@ -1009,8 +1311,17 @@ export class LunchView implements LunchEvents {
     this.visX1 = vx.x1;
     this.nums.bounds.x0 = vx.x0;
     this.nums.bounds.x1 = vx.x1;
+    this.tmpA.set(0, view.h - 4);
+    this.nums.bounds.y1 = Math.min(this.map.H, this.L.nums.toLocal(this.tmpA, undefined, this.tmpB).y);
+    /* 숫자 최소 글자 크기(화면 px)용: 숫자 좌표 1 이 화면 몇 px 인지 */
+    {
+      const wt = this.L.nums.worldTransform;
+      const onPx = Math.hypot(wt.a, wt.b);
+      this.nums.pxK = onPx > 0 ? 1 / onPx : 0;
+    }
     /* 대상 */
-    const pills: { tv: TV; x: number; y: number }[] = [];
+    const pills = this.pillBuf;
+    let nPill = 0;
     for (const tv of this.tvs.values()) {
       const e = tv.e;
       if (tv.delay > 0) {
@@ -1066,16 +1377,17 @@ export class LunchView implements LunchEvents {
       const wob = hitOn ? Math.sin(this.rt * FX.persuade.wobbleHz * Math.PI * 2 + tv.ph) * ((FX.persuade.wobbleDeg * Math.PI) / 180) : 0;
       let sx = base * pop;
       let sy = base * pop * breathe;
-      const flip = e.road && e.road.ax === 'h' && e.dir > 0 ? -1 : 1;
+      const flip = e.road && e.rax === 'h' && e.rdir > 0 ? -1 : 1;
       tv.body.position.set(x, y - lift - (1 - Math.min(1, ap * 1.6)) * this.lot * 0.25);
       tv.spr.scale.set(sx * flip, sy);
       tv.add.scale.copyFrom(tv.spr.scale);
       /* 설득받는 중: 하얗게 깜빡(피격 느낌) */
       tv.add.alpha = hitOn ? (Math.sin(this.rt * 34 + tv.ph) > 0.35 ? 0.28 : 0.06) : 0;
+      tv.add.visible = hitOn;
       tv.body.rotation = wob;
       tv.body.zIndex = y;
       /* 솔깃(입소문) 파란 틴트 */
-      tv.spr.tint = e.frz > 0 ? 0xa8dcff : 0xffffff;
+      setTint(tv.spr, e.frz > 0 ? 0xa8dcff : 0xffffff);
       /* 깜빡(수명 끝) */
       tv.body.alpha = e.warn ? (Math.sin(this.rt * FX.warn.hz * Math.PI * 2) > 0 ? 1 : 0.5) : 1;
       /* 그림자 */
@@ -1101,10 +1413,10 @@ export class LunchView implements LunchEvents {
       if ((e.fleeing || tv.fleeT > 0) && e.road) {
         tv.fleeT -= rt;
         if (Math.random() < rt / 0.2) {
-          const bx = e.road.ax === 'h' ? x - e.dir * tv.box * 0.45 : x;
-          const by = e.road.ax === 'v' ? y - e.dir * tv.box * 0.45 : y - tv.box * 0.2;
+          const bx = e.rax === 'h' ? x - e.rdir * tv.box * 0.45 : x;
+          const by = e.rax === 'v' ? y - e.rdir * tv.box * 0.45 : y - tv.box * 0.2;
           this.parts.emit(T('fx.smoke'), { x: bx, y: by, vx: 0, vy: -20, life: 0.5, s0: 0.25 * pk, s1: 0.55 * pk, a0: 0.7 });
-          this.parts.emit(T('fx.streak'), { x: bx, y: by - 10, vx: 0, vy: 0, life: 0.25, s0: pk, s1: pk * 0.6, a0: 0.8, rot: e.road.ax === 'h' ? (e.dir > 0 ? 0 : Math.PI) : e.dir > 0 ? Math.PI / 2 : -Math.PI / 2 });
+          this.parts.emit(T('fx.streak'), { x: bx, y: by - 10, vx: 0, vy: 0, life: 0.25, s0: pk, s1: pk * 0.6, a0: 0.8, rot: e.rax === 'h' ? (e.rdir > 0 ? 0 : Math.PI) : e.rdir > 0 ? Math.PI / 2 : -Math.PI / 2 });
         }
       }
       /* 게이지 */
@@ -1118,7 +1430,7 @@ export class LunchView implements LunchEvents {
         gg.fill.width = Math.max(16, fw * r);
         gg.fill.visible = r > 0.001;
         gg.ghost.width = Math.max(16, fw * gg.ghostR);
-        gg.fill.tint = e.boss ? 0xff8fab : hitOn ? 0xffd36b : 0x7dff8a;
+        setTint(gg.fill, e.boss ? 0xff8fab : hitOn ? 0xffd36b : 0x7dff8a);
         gg.c.position.set(x - gg.w / 2, y - tv.box * 0.8 - 14 * pk - gg.h - lift);
         gg.c.alpha = Math.min(1, ap * 2);
       }
@@ -1148,11 +1460,16 @@ export class LunchView implements LunchEvents {
       const pillLow = pp.low;
       if (tv.pill) {
         tv.pillT -= rt;
-        pills.push({ tv, x: pp.x, y: pp.y });
+        let q = pills[nPill];
+        if (!q) q = pills[nPill] = { tv, x: 0, y: 0 };
+        q.tv = tv;
+        q.x = pp.x;
+        q.y = pp.y;
+        nPill++;
         if (tv.pillT <= 0) {
           const p = tv.pill;
           tv.pill = null;
-          gsap.to(p, { alpha: 0, duration: 0.25, onComplete: () => p.destroy({ children: true }) });
+          gsap.to(p, { alpha: 0, duration: 0.25, onComplete: () => dropPill(p) });
         }
       }
       if (tv.arrow) {
@@ -1167,6 +1484,7 @@ export class LunchView implements LunchEvents {
       /* 매칭 부족 쪽: 살짝 들썩 */
       if (lack && e.t.side === lack && !e.boss && ap >= 1) tv.body.y -= Math.abs(Math.sin(this.rt * 5 + tv.ph)) * 3 * pk;
     }
+    pills.length = nPill;
     this.placePills(pills, rt);
     /* 퇴장 애니메이션 */
     for (let i = this.dying.length - 1; i >= 0; i--) {
@@ -1174,7 +1492,7 @@ export class LunchView implements LunchEvents {
       tv.leaveT += rt;
       const e = tv.e;
       const base = tv.box / Math.max(1, tv.spr.texture.width);
-      const flip = e.road && e.road.ax === 'h' && e.dir > 0 ? -1 : 1;
+      const flip = e.road && e.rax === 'h' && e.rdir > 0 ? -1 : 1;
       let done = false;
       if (tv.state === 'signed') {
         const key = this.texFor(tv);
@@ -1186,6 +1504,7 @@ export class LunchView implements LunchEvents {
         const t = tv.leaveT;
         tv.flash = Math.max(0, 1 - t / 0.15);
         tv.add.alpha = tv.flash;
+        tv.add.visible = tv.flash > 0.001;
         let sq = 1;
         if (t < 0.08) sq = 1 + (t / 0.08) * 0.15;
         else if (t < 0.2) sq = 1.15 - ((t - 0.08) / 0.12) * 0.3;
@@ -1275,7 +1594,9 @@ export class LunchView implements LunchEvents {
       this.boomG.circle(b.x, b.y, b.r * (0.5 + k * 0.6)).stroke({ width: 14 - 11 * k, color: 0xffdc78, alpha: 1 - k });
     }
     /* 스킬 효과 */
-    const live = new Set(lunch.fx.map((f) => f.id));
+    const live = this.liveFx;
+    live.clear();
+    for (const f of lunch.fx) live.add(f.id);
     for (const [id, v] of this.skv) {
       const fx = v.fx;
       if (!live.has(id)) {
@@ -1375,13 +1696,18 @@ export class LunchView implements LunchEvents {
     this.rAppear = Math.min(1, this.rAppear + rt / 0.3);
     this.rGold = Math.max(0, this.rGold - rt);
     const R = lunch.R * (this.rAppear < 1 ? 0.3 + this.rAppear * 0.7 : 1);
-    const anyIn = lunch.ents.some((e) => e.inR);
+    let anyIn = false;
+    for (const e of lunch.ents)
+      if (e.inR) {
+        anyIn = true;
+        break;
+      }
     const pulse = anyIn ? 1 + (Math.sin(this.rt * FX.radius.pulseHz * Math.PI * 2) * 0.5 + 0.5) * (FX.radius.pulseScale - 1) : 1;
     this.radiusC.position.set(lunch.net.x, lunch.net.y);
     this.radiusC.alpha = this.rAppear;
     this.rDisk.width = this.rDisk.height = R * 2 * pulse;
     this.rDisk.rotation += rt * ((FX.radius.dashRotDegPerSec * Math.PI) / 180);
-    this.rDisk.tint = this.rGold > 0 ? 0xffd36b : anyIn ? 0xffe28a : 0xffffff;
+    setTint(this.rDisk, this.rGold > 0 ? 0xffd36b : anyIn ? 0xffe28a : 0xffffff);
     this.rShadow.width = this.rShadow.height = R * 2 * pulse;
     this.rShadow.rotation = this.rDisk.rotation;
     this.rShadow.position.set(0, 3 * pk);
@@ -1424,22 +1750,29 @@ export class LunchView implements LunchEvents {
       this.darkG.rect(x1, y0, Math.max(0, m.W + pad - x1), y1 - y0).fill(col);
     }
     this.parts.update(rt);
+    this.updateAvoid();
     this.nums.update(rt);
     this.updateStamps(rt);
     this.updateBubbles(rt);
     this.camera.update(rt);
-    markFx();
+    /* fxTop 은 그릴 것이 있을 때만 루프가 그림(여기서 매 프레임 markFx 하지 않음, 설계서 7장 4) */
   }
 
   /**
    * 새 거래처 알약 자리: 대상 위. HUD 띠(지도 영역 위)에 걸리면 대상 아래로(화살표는 숨김).
    * 가로는 화면(지도 폭) 안으로 밀어 넣는다(가장자리 부지·지도 밖에서 들어오는 도로형 대상도 글자가 잘리지 않게).
    */
+  /** 결과는 늘 같은 객체(this.ppOut) — 부른 쪽이 바로 읽고 버림 */
+  private ppOut = { x: 0, y: 0, low: false };
   private pillPos(tv: TV, x: number, y: number): { x: number; y: number; low: boolean } {
     const pk = this.portK;
     const up = y - tv.box * 0.8 - 80 * pk;
     const low = up - 78 * pk < this.map.area.y;
-    return { x: this.clampPillX(tv, x, pk * 0.9), y: low ? y + 44 * pk : up, low };
+    const o = this.ppOut;
+    o.x = this.clampPillX(tv, x, pk * 0.9);
+    o.y = low ? y + 44 * pk : up;
+    o.low = low;
+    return o;
   }
   private clampPillX(tv: TV, x: number, scale: number): number {
     const hw = tv.pillHW * scale + 8 * this.portK;
@@ -1451,6 +1784,7 @@ export class LunchView implements LunchEvents {
   /**
    * 떠 있는 새 거래처 알약끼리 겹치면 나중 것을 빈 자리(위·아래 한 칸씩, 그다음 옆)로 옮긴다
    * (판 후반 새 거래처가 몰릴 때 이름표가 깔리지 않게). 빈 자리가 없으면 가장 덜 겹치는 자리.
+   * 화면 위 배너(대형 계약·새 거래처!)가 뜬 자리도 비킨다 — 배너 바로 위·아래도 후보로(배너 부제와 알약 글자가 포개지지 않게).
    */
   private placePills(list: { tv: TV; x: number; y: number }[], rt: number): void {
     if (!list.length) return;
@@ -1463,37 +1797,55 @@ export class LunchView implements LunchEvents {
     const maxY = this.map.H - bot;
     list.sort((a, b) => a.tv.e.id - b.tv.e.id);
     const placed: { x: number; y: number; hw: number }[] = [];
+    const bans = bannerRects(true).map((r) => {
+      const p0 = this.L.labels.toLocal({ x: r.x0, y: r.y0 });
+      const p1 = this.L.labels.toLocal({ x: r.x1, y: r.y1 });
+      return { x0: Math.min(p0.x, p1.x), x1: Math.max(p0.x, p1.x), y0: Math.min(p0.y, p1.y) - 6 * s, y1: Math.max(p0.y, p1.y) + 6 * s };
+    });
     for (const p of list) {
       const hw = p.tv.pillHW * s * 1.1;
       const over = (x: number, y: number) => {
         let n = 0;
         for (const q of placed) if (Math.abs(q.x - x) < q.hw + hw + 8 * s && Math.abs(q.y - y) < hh) n++;
+        for (const b of bans) if (x + hw > b.x0 && x - hw < b.x1 && y + bot > b.y0 && y - top < b.y1) n += 2;
         return n;
       };
       let bx = p.x;
       let by = p.y;
       let bn = over(bx, by);
       if (bn > 0) {
-        search: for (const dxk of [0, 1, -1]) {
+        const cand: { x: number; y: number }[] = [];
+        for (const dxk of [0, 1, -1]) {
           for (const k of [1, -1, 2, -2, 3, -3]) {
-            const xx = this.clampPillX(p.tv, p.x + dxk * (hw * 2 + 12 * s), s * 1.1);
-            const yy = p.y + (dxk === 0 ? k * hh : (k > 0 ? k - 1 : k) * hh);
-            if (yy < minY || yy > maxY) continue;
-            const o = over(xx, yy);
-            if (o < bn) {
-              bn = o;
-              bx = xx;
-              by = yy;
-              if (o === 0) break search;
-            }
+            cand.push({ x: p.x + dxk * (hw * 2 + 12 * s), y: p.y + (dxk === 0 ? k * hh : (k > 0 ? k - 1 : k) * hh) });
+          }
+        }
+        /* 배너 바로 위·아래(가까운 쪽 먼저) */
+        for (const b of bans) {
+          const ys = [b.y0 - bot - 4 * s, b.y1 + top + 4 * s].sort((u, v) => Math.abs(u - p.y) - Math.abs(v - p.y));
+          for (const yy of ys) cand.splice(0, 0, { x: p.x, y: yy });
+        }
+        let bd = Infinity;
+        for (const c0 of cand) {
+          const xx = this.clampPillX(p.tv, c0.x, s * 1.1);
+          const yy = c0.y;
+          if (yy < minY || yy > maxY) continue;
+          const o = over(xx, yy);
+          const d = Math.abs(yy - p.y) + Math.abs(xx - p.x);
+          if (o < bn || (o === bn && o === 0 && d < bd)) {
+            bn = o;
+            bd = d;
+            bx = xx;
+            by = yy;
           }
         }
       }
       placed.push({ x: bx, y: by, hw });
       const pill = p.tv.pill;
       if (!pill || pill.destroyed) continue;
-      /* 처음 뜰 때(아직 커지는 중)는 제자리, 그 뒤 자리를 옮길 때는 부드럽게 */
-      const k = pill.scale.x < s * 0.5 ? 1 : Math.min(1, rt * 12);
+      /* 처음 뜰 때(아직 커지는 중)는 제자리, 그 뒤 자리를 옮길 때는 부드럽게. 지금 자리가 배너 밑이면 바로(배너 부제와 포개진 채 미끄러지지 않게) */
+      const underBan = bans.some((b) => pill.x + hw > b.x0 && pill.x - hw < b.x1 && pill.y + bot > b.y0 && pill.y - top < b.y1);
+      const k = pill.scale.x < s * 0.5 || underBan ? 1 : Math.min(1, rt * 12);
       const tx = this.clampPillX(p.tv, bx, Math.max(s, pill.scale.x));
       pill.position.set(pill.x + (tx - pill.x) * k, pill.y + (by - pill.y) * k);
     }
@@ -1507,7 +1859,7 @@ export class LunchView implements LunchEvents {
     tv.gauge?.c.destroy({ children: true });
     tv.clock?.destroy();
     tv.wmark?.destroy();
-    tv.pill?.destroy({ children: true });
+    if (tv.pill) dropPill(tv.pill);
     tv.arrow?.destroy();
   }
 
@@ -1519,6 +1871,8 @@ export class LunchView implements LunchEvents {
     this.tvs.clear();
     this.dying = [];
     this.camera.destroy();
+    /* 캐시 글자(도장·말풍선)는 떼어 두고 부숨 — 다음 영업일에 다시 씀 */
+    detachCached(this.root);
     this.root.destroy({ children: true });
   }
 }
