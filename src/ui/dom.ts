@@ -25,6 +25,58 @@ const Q = String.fromCharCode(34);
 export const srcAttr = (uri: string) => 'src=' + Q + uri.replace(/"/g, '%22') + Q;
 export const img = (key: string, cls = 'ic', extra = '') => `<img class="${cls}" ${srcAttr(iconUri(key))} alt="" draggable="false" ${extra}>`;
 
+/**
+ * 아이콘 미리 불러 두기: 보이지 않는 칸에 <img> 를 하나씩(0.06초 간격) 붙여 둔다. 브라우저는 같은 주소의 그림을 한 번만 해석해 두고 같이 쓰므로
+ * 나중에 모달이 한꺼번에 아이콘 여러 개를 띄울 때 아이콘마다 SVG 문서를 새로 만드는 일이 한 작업에 몰리지 않음(설계서 7장)
+ */
+let iconHold: HTMLDivElement | null = null;
+const warmed = new Set<string>();
+export function warmIcons(keys: string[]): void {
+  const todo = keys.filter((k) => !warmed.has(k));
+  if (!todo.length) return;
+  for (const k of todo) warmed.add(k);
+  if (!iconHold) {
+    iconHold = document.createElement('div');
+    iconHold.setAttribute('aria-hidden', 'true');
+    iconHold.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none';
+    document.body.appendChild(iconHold);
+  }
+  const hold = iconHold;
+  let i = 0;
+  const step = (): void => {
+    if (i >= todo.length) return;
+    const key = todo[i++];
+    const im = new Image();
+    im.alt = '';
+    im.src = iconUri(key);
+    hold.appendChild(im);
+    /* 비트맵으로도 한 장 구워 둠(iconFast): SVG 아이콘은 처음 그릴 때마다 SVG 를 다시 그려(아이콘 하나 폰 4배 느림 4~12ms) 모달이 뜨는 프레임에 몰렸음 */
+    im.decode()
+      .then(() => {
+        const w0 = im.naturalWidth || 1;
+        const h0 = im.naturalHeight || 1;
+        const k = ICON_PX / Math.max(w0, h0);
+        const cv = document.createElement('canvas');
+        cv.width = Math.max(1, Math.round(w0 * k));
+        cv.height = Math.max(1, Math.round(h0 * k));
+        const g = cv.getContext('2d');
+        if (!g) return;
+        g.drawImage(im, 0, 0, cv.width, cv.height);
+        pngCache[key] = cv.toDataURL('image/png');
+      })
+      .catch(() => undefined);
+    setTimeout(step, 80);
+  };
+  setTimeout(step, 100);
+}
+/** 구운 아이콘 한 변(px). 모달 아이콘(최대 약 30 CSS px) × 폰 배율 3 */
+const ICON_PX = 96;
+const pngCache: Record<string, string> = {};
+/** 미리 구운 비트맵 아이콘(없으면 SVG) — 한꺼번에 여러 개 뜨는 모달용 */
+export function iconFast(key: string): string {
+  return pngCache[key] || iconUri(key);
+}
+export const imgFast = (key: string, cls = 'ic', extra = '') => `<img class="${cls}" ${srcAttr(iconFast(key))} alt="" draggable="false" ${extra}>`;
 export function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, html?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
   if (cls) e.className = cls;

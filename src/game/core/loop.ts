@@ -158,7 +158,24 @@ function schedule(now: number): void {
         waitT = 0;
         if (!asleep && !document.hidden) reqRaf(false);
       }, left - vsync);
-  } else reqRaf(true);
+    return;
+  }
+  /*
+   * 바로 rAF 를 요청하면 다음 화면 갱신(vsync)에 불린다. 그 vsync 가 차례보다 이르면(30fps · 60Hz 에서 한 칸 건너뛸 때) 그 rAF 는
+   * 할 일 없이 돌아가며 브라우저 프레임 한 바퀴(입력 처리·스타일·합성)만 더 돌리므로(폰 4배 느림에서 프레임당 수 ms), 그 vsync 가 지난 뒤에 요청
+   */
+  if (left > 0 && lastRafAt >= 0) {
+    const nextV = lastRafAt + vsync * Math.max(1, Math.ceil((now - lastRafAt) / vsync));
+    if (nextV < acceptAt() - 1) {
+      if (!waitT)
+        waitT = window.setTimeout(() => {
+          waitT = 0;
+          if (!asleep && !document.hidden) reqRaf(false);
+        }, Math.max(0, nextV - now + 2));
+      return;
+    }
+  }
+  reqRaf(true);
 }
 
 function wake(): void {
@@ -212,7 +229,8 @@ function frame(now: number): void {
   /* 주사율 어림: 바로 다시 요청한 rAF 사이 간격만(타이머를 거친 것은 기다린 시간이 섞임) */
   if (rafDirect && lastRafAt >= 0) {
     const d = now - lastRafAt;
-    if (d > 3 && d < 40) vsync += (d - vsync) * 0.2;
+    /* 한 칸짜리 간격만(차례를 기다려 두 칸 뒤에 불린 것은 빼고) */
+    if (d > 3 && d < Math.min(40, vsync * 1.5)) vsync += (d - vsync) * 0.2;
   }
   lastRafAt = now;
   if (document.hidden) return;

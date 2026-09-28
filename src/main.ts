@@ -12,7 +12,7 @@ import { storage } from './storage';
 import { injectStyle } from './ui/style';
 import { clearToasts, img, installButtonFeel, mountToasts, toast } from './ui/dom';
 import { LunchHud, anchorOf, bumpAnchor, displayBusy, snapDisplay, tickDisplay } from './ui/hud';
-import { districtModal, endingModal, hideModal, modalKey, modalOpen, mountModal, settleModal, confirmBox } from './ui/modals';
+import { districtModal, endingModal, hideModal, modalKey, modalOpen, mountModal, settleModal, confirmBox, warmSettleIcons, warmSettleLayout } from './ui/modals';
 import { NoWebGLError, app, fxApp, applyResolution, initStage, layout, markFx, onLayout, setResolutionFn, takeFx, uiRoot, view } from './game/core/stage';
 import { fpsCap, onFrame, perf, requestRender, setAwake, setContinuous, setFpsCap, setFxNeeds, startLoop } from './game/core/loop';
 import { budget, currentTier, fpsTarget, lowerTier, onTierChange, renderRes, sampleFrame, setMaxTexture, wantAntialias, watchFrames } from './game/core/quality';
@@ -27,7 +27,7 @@ import { OfficeScene } from './game/office/scene';
 import { LunchScene } from './game/lunch/scene';
 import { todayMap } from './game/map/today';
 import { TitleScene } from './game/title/scene';
-import { bannerRects, bannerStat, clearTop, confetti, cutBusy, fireworks, initTop, setFlyBudget, setHudResolver, skipCut, topActive, updateTop, wipe, wiping } from './game/fx/top';
+import { bannerRects, bannerStat, clearTop, confetti, cutBusy, fireworks, idleWarmTop, initTop, setFlyBudget, setHudResolver, skipCut, topActive, updateTop, wipe, wiping } from './game/fx/top';
 import type { RunStats } from './game/lunch/logic';
 
 const state: NonNullable<Window['__sikdae']> = {
@@ -207,6 +207,7 @@ async function boot() {
       (perf as unknown as Record<string, number>).artRest = 1;
       mark('rest');
       preUploadFx();
+      warmTopIdle();
     }
   })();
   mark('map');
@@ -338,6 +339,18 @@ function preUploadFx(): void {
 /** 보스가 나올 수 있으면 보스 곡을 사무실에서 미리 구움(영업 중 굽기·실시간 합성 없게, 설계서 7장 7) */
 function prefetchBoss(): void {
   if (unlockedTargets().some((t) => t.beh === 'boss')) prefetchMusic('boss');
+  warmTopIdle();
+}
+/** 영업 중에 처음 뜰 fxTop 글자(배너·아이템 컷)를 사무실 여유 시간에 미리 그림(설계서 7장 — 영업 중 긴 작업 없게) */
+function warmTopIdle(): void {
+  warmSettleIcons();
+  setTimeout(() => {
+    if (scene !== 'lunch') warmSettleLayout();
+  }, 2500);
+  idleWarmTop(
+    unlockedTargets().filter((t) => t.grade >= 3).map((t) => `${t.name} · ${t.sizeLabel}`),
+    () => scene === 'lunch',
+  );
 }
 
 /** 부팅 안내 한 줄(WebGL 없음 등) — 흰 화면 대신 */
@@ -350,11 +363,27 @@ function showBootNote(msg: string): void {
 
 /** 화질 등급을 지금 화면에 반영(해상도·프레임 상한·연출 예산). auto = 자동으로 낮춘 경우(토스트 한 번) */
 let qualityToast = false;
+/** 영업 중에 자동으로 낮춘 화질의 해상도는 그 영업이 끝난 뒤(와이프 안)에 맞춤 */
+let resPending = false;
+function flushResolution(): void {
+  if (!resPending) return;
+  resPending = false;
+  applyResolution();
+  perf.res = view.res;
+}
 function applyQuality(auto: boolean): void {
   const b = budget();
   setFpsCap(fpsTarget());
   setFlyBudget(b.coins);
-  applyResolution();
+  /*
+   * 영업 중 자동으로 낮춘 경우(설계서 7장): 연출 예산·프레임 상한은 바로, 해상도(캔버스 두 장 다시 잡기·HUD 다시 재기)는 영업이 끝난 뒤 와이프 안에서.
+   * 영업 도중에 한 프레임에 몰아서 하면 폰 4배 느림에서 수백 ms 짜리 긴 작업 하나였음
+   */
+  if (auto && scene === 'lunch') resPending = true;
+  else {
+    resPending = false;
+    applyResolution();
+  }
   perf.tier = currentTier();
   document.body.classList.toggle('fx-lite', currentTier() !== 'high');
   perf.quality = S.settings.quality;
@@ -363,7 +392,8 @@ function applyQuality(auto: boolean): void {
   office?.applyQuality(b);
   requestRender(2);
   if (auto) {
-    saveGame();
+    /* 저장(직렬화·localStorage)은 따로 한 작업으로 */
+    setTimeout(() => saveGame(), 0);
     if (!qualityToast) {
       qualityToast = true;
       toast('화질을 낮췄어요', 'ic.settings');
@@ -421,6 +451,7 @@ function onLunchEnd(st: RunStats, ending: boolean): void {
     busy = true;
     await wipe(async () => {
       lunch?.destroy();
+      flushResolution();
       clearTop();
       lunch = new LunchScene(lunchHud);
       lunch.onEnd = (s2, e2) => onLunchEnd(s2, e2);
@@ -434,6 +465,7 @@ function onLunchEnd(st: RunStats, ending: boolean): void {
     busy = true;
     await wipe(() => {
       lunch?.destroy();
+      flushResolution();
       lunch = null;
       clearTop();
       lunchHud.root.classList.remove('on');

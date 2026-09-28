@@ -16,7 +16,7 @@ import { unlockedTargets } from '../rules';
 import { breath } from '../map/today';
 import { view, worldToFx } from '../core/stage';
 import { budget, type TierBudget } from '../core/quality';
-import { hudVersion } from '../../ui/hud';
+import { hudVersion, onHudResize } from '../../ui/hud';
 import { T, circle, pill, setTint } from '../core/tex';
 import { detachCached, releaseText, takeText } from '../core/textcache';
 import { Camera } from '../fx/camera';
@@ -104,6 +104,36 @@ function dropPill(p: Container): void {
   if (p.destroyed) return;
   detachCached(p);
   p.destroy({ children: true });
+}
+/**
+ * 움직이는 것의 앞뒤(y) 순서: zIndex 를 매 프레임 y 로 쓰면 값이 바뀔 때마다 Pixi 가 그 묶음의 그리기 목록을 새로 짬(순서가 그대로여도).
+ * y 는 따로 적어 두고(setZ), 실제 순서가 어긋난 프레임에만 zIndex 를 한꺼번에 맞춤(sortByZ) — 그리는 순서는 예전과 같음
+ */
+type ZC = Container & { zy?: number };
+/** 이미 빈 Graphics 는 다시 비우지 않음(비울 때마다 Pixi 가 GPU 데이터를 다시 만들고 그 층 그리기 목록을 새로 짬) */
+function clearG(g: Graphics): void {
+  if (g.context.instructions.length) g.clear();
+}
+
+/** 층에서 떼지 않고 안 보이게(알파 0 · 크기 0): 다시 쓸 때 알파·크기를 다시 넣음 */
+function park(o: Container): void {
+  o.alpha = 0;
+  o.scale.set(0);
+}
+function setZ(o: Container, y: number): void {
+  (o as ZC).zy = y;
+}
+function sortByZ(layer: Container): void {
+  const ch = layer.children as ZC[];
+  let prev = -Infinity;
+  for (let i = 0; i < ch.length; i++) {
+    const k = ch[i].zy ?? ch[i].zIndex;
+    if (k < prev) {
+      for (const c of ch) if (c.zy !== undefined) c.zIndex = c.zy;
+      return;
+    }
+    prev = k;
+  }
 }
 /** grade 별 최소 히트스톱(ms) */
 const HITSTOP_FLOOR = [0, 30, 45, 90, 120];
@@ -234,7 +264,7 @@ export class LunchView implements LunchEvents {
     this.portK = map.lot / 129;
     this.dark = !!DISTRICT_BY[map.district].mod.dark;
     this.bud = budget();
-    this.parts = new Particles(Math.min(FX.budget.particles, this.bud.particles));
+    this.parts = new Particles(Math.min(FX.budget.particles, this.bud.particles), true);
     this.nums = new Numbers(Math.min(FX.budget.numbers, this.bud.numbers));
     this.nums.scale = map.orient === 'port' ? FX.number.portScale : 1;
     this.nums.merge = S.settings.mergeNumbers;
@@ -248,6 +278,22 @@ export class LunchView implements LunchEvents {
     /* 도장은 숫자 아래(금액이 도장에 덮이지 않게), 말풍선·새 거래처 알약은 맨 위 */
     this.camera.cam.addChild(Ls.ground, Ls.roads, Ls.shadows, Ls.actors, Ls.clouds, Ls.gauges, Ls.skill, Ls.floats, Ls.dark, Ls.radius, Ls.parts, Ls.stamps, Ls.nums, Ls.labels);
     Ls.actors.sortableChildren = true;
+    /*
+     * 자주 바뀌는 층은 따로 묶음(Pixi render group, 설계서 7장): 생기고 사라지는 것이 많은 층(대상·차·보행자 / 파티클 / 숫자)과
+     * 매 프레임 다시 그리는 Graphics 가 있는 층(어둠 가림 / 반경·손가락 선).
+     * Pixi 는 보이기·순서가 바뀌거나 작은 Graphics 를 다시 그릴 때마다 그 묶음 전체의 그리기 목록을 새로 짜는데, 세계 전체가 한 묶음이라
+     * 영업 내내 프레임마다 지도·도장·알약까지 다시 훑었음(측정: 426프레임 중 429번). 그림 순서·모양은 그대로
+     */
+    /* 묶음 경계마다 그리기 호출이 하나씩 끊기므로 비어 있기 쉬운 층은 뺌: 어둠 가림은 어두운 상권에서만, 스킬 번개·폭발(쓰는 동안만 다시 그림)은 묶지 않음 */
+    for (const c of [Ls.actors, Ls.radius, Ls.parts, Ls.nums]) c.isRenderGroup = true;
+    if (this.dark) Ls.dark.isRenderGroup = true;
+    /*
+     * 세계 묶음에 남아 있던 층 가운데 물체가 많고 자주 바뀌는 두 층도 따로 묶음: 그림자(대상 등장·퇴장) · 게이지(설득 시작·시계·솔깃 배지, 대상마다 나인슬라이스 3장).
+     * 후반 측정에서 세계 묶음이 537프레임 중 493번 다시 짜였고 그 물체 대부분이 이 두 층이었음. 도장·말풍선·스킬 효과처럼 물체가 적은 층은
+     * 세계 묶음에 둠(묶음마다 그리기 호출·전역 유니폼이 하나씩 늘어 오히려 손해 — 여섯 층을 묶어 본 측정에서 그리기 +4, 렌더 시간 그대로).
+     * 그리는 순서·모양은 같음
+     */
+    for (const c of [Ls.shadows, Ls.gauges]) c.isRenderGroup = true;
     Ls.parts.addChild(this.parts.view);
     Ls.nums.addChild(this.nums.view);
     const g = new Sprite(ground);
@@ -377,7 +423,7 @@ export class LunchView implements LunchEvents {
         c.sp.scale.set(ax.ax === 'h' && ax.d < 0 ? -pk : pk, ax.ax === 'v' && ax.d < 0 ? -pk : pk);
       }
       c.sp.position.set(p.x, p.y);
-      c.sp.zIndex = p.y;
+      setZ(c.sp, p.y);
     }
     for (const w of this.walkers) {
       const len = w.cum[w.cum.length - 1];
@@ -394,7 +440,7 @@ export class LunchView implements LunchEvents {
       const x = p.x, y = p.y;
       w.sp.position.set(x, y);
       w.sp.scale.x = Math.abs(w.sp.scale.y) * (p.tx * w.dir > 0 ? -1 : 1);
-      w.sp.zIndex = y;
+      setZ(w.sp, y);
     }
     for (const c of this.cloudsS) {
       c.sp.x += c.v * dt;
@@ -444,9 +490,7 @@ export class LunchView implements LunchEvents {
     add.visible = false;
     body.addChild(spr, add);
     const box = e.w;
-    const shadow = new Sprite(T('o.shadow'));
-    shadow.anchor.set(0.5);
-    this.L.shadows.addChild(shadow);
+    const shadow = this.takeShadow();
     this.L.actors.addChild(body);
     const tv: TV = {
       e, body, spr, add, shadow, gauge: null, box, appear: 0, delay: initial ? Math.random() * 0.35 : 0, state: 'live', leaveT: 0, flash: 0, squash: 0,
@@ -454,7 +498,8 @@ export class LunchView implements LunchEvents {
       pill: null, pillT: 0, pillHW: 0, arrow: null, arrowT: 0, dx: e.x, dy: e.y, popped: false, keys: keysOf(e.t.id),
     };
     body.visible = false;
-    shadow.visible = false;
+    /* 그림자는 나타날 때까지 알파 0(visible 을 끄고 켜면 그림자 층 그리기 목록을 새로 짬) */
+    shadow.alpha = 0;
     if (this.dark && !e.road) {
       for (let i = 0; i < 3; i++) {
         const l = new Sprite(T('fx.windowLight'));
@@ -483,33 +528,68 @@ export class LunchView implements LunchEvents {
       else sfx('target_appear', { tier: e.t.tier });
     }
   }
+  /** 층에 붙여 둔 채 다시 쓰는 그림자·게이지·배지(수명 시계·솔깃) */
+  private shadowFree: Sprite[] = [];
+  private gaugeFree: Gauge[] = [];
+  private clockFree: Sprite[] = [];
+  private wmarkFree: Sprite[] = [];
+  private takeShadow(): Sprite {
+    let sp = this.shadowFree.pop();
+    if (!sp) {
+      sp = new Sprite(T('o.shadow'));
+      sp.anchor.set(0.5);
+      this.L.shadows.addChild(sp);
+    }
+    return sp;
+  }
+  private takeBadge(pool: Sprite[], key: string, ay: number): Sprite {
+    let sp = pool.pop();
+    if (!sp) {
+      sp = new Sprite(T(key));
+      sp.anchor.set(0.5, ay);
+      this.L.gauges.addChild(sp);
+    }
+    sp.alpha = 1;
+    return sp;
+  }
   private gaugeFor(tv: TV): Gauge {
     if (tv.gauge) return tv.gauge;
     const e = tv.e;
     const big = e.t.big || e.boss;
     const w = Math.max(30, tv.box * (big ? FX.persuade.gaugeWBig : FX.persuade.gaugeW));
     const h = (e.boss ? FX.persuade.gaugeHBoss : FX.persuade.gaugeH) * this.portK * (e.boss ? 1.6 : 1.25);
-    const c = new Container();
     const k = h / 16;
-    const mk = (tint: number, alpha: number) => {
-      const s = new NineSliceSprite({ texture: pill(), leftWidth: 8, topHeight: 8, rightWidth: 8, bottomHeight: 8 });
+    /* 다 쓴 게이지는 층에 붙인 채 풀에 둠(붙였다 부수면 그때마다 게이지 층 그리기 목록을 새로 짬). 모양은 새로 만든 것과 같게 다시 맞춤 */
+    let gg = this.gaugeFree.pop();
+    if (!gg) {
+      const c = new Container();
+      const mk = () => new NineSliceSprite({ texture: pill(), leftWidth: 8, topHeight: 8, rightWidth: 8, bottomHeight: 8 });
+      const bg = mk();
+      const ghost = mk();
+      const fill = mk();
+      c.addChild(bg, ghost, fill);
+      this.L.gauges.addChild(c);
+      gg = { c, bg, ghost, fill, ghostR: 1, w, h };
+    }
+    const set = (s: NineSliceSprite, tint: number, alpha: number) => {
       s.height = 16;
       s.width = w / k;
       s.tint = tint;
       s.alpha = alpha;
-      return s;
     };
-    const bg = mk(0x000000, 0.45);
-    bg.width = w / k + 6;
-    bg.height = 22;
-    bg.position.set(-3, -3);
-    const ghost = mk(0xffffff, 0.9);
-    const fill = mk(e.boss ? 0xff8fab : 0x7dff8a, 1);
-    c.addChild(bg, ghost, fill);
-    c.scale.set(k);
-    this.L.gauges.addChild(c);
-    tv.gauge = { c, bg, ghost, fill, ghostR: 1, w, h };
-    return tv.gauge;
+    set(gg.bg, 0x000000, 0.45);
+    gg.bg.width = w / k + 6;
+    gg.bg.height = 22;
+    gg.bg.position.set(-3, -3);
+    set(gg.ghost, 0xffffff, 0.9);
+    set(gg.fill, e.boss ? 0xff8fab : 0x7dff8a, 1);
+    gg.c.scale.set(k);
+    gg.c.alpha = 1;
+    gg.ghostR = 1;
+    gg.w = w;
+    gg.h = h;
+    tv.gauge = gg;
+    return gg;
   }
 
   remove(e: Ent, why: 'signed' | 'miss' | 'exit'): void {
@@ -685,21 +765,24 @@ export class LunchView implements LunchEvents {
   private hudLocal: { rt: number; rects: KeepOut[] } = { rt: -1, rects: [] };
   /** 지난 변환(a b c d tx ty · 화면 자리 잰 시각) */
   private hudKey = [NaN, NaN, NaN, NaN, NaN, NaN, NaN];
+  /** HUD 자리(화면 px)를 지금 잼. ResizeObserver 콜백(레이아웃 직후 — 강제 레이아웃 없음)과 배치 버전이 바뀐 뒤 처음 쓸 때 */
+  private measureHud(now = performance.now()): void {
+    const out: { l: number; t: number; r: number; b: number }[] = [];
+    const sel = '#lunch .lhud .cur, #lunch .lhud .lvl, #lunch .lhud .timer, #lunch .lhud .match, #lunch .lhud .pend, #lunch .lhud .dname, #lunch .lportrait, #lunch .bossbar.on, #lunch .slots .slot, #lunch .endbtn';
+    for (const el of Array.from(document.querySelectorAll<HTMLElement>(sel))) {
+      if (el.offsetParent === null) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) continue;
+      out.push({ l: r.left, t: r.top, r: r.right, b: r.bottom });
+    }
+    this.hudScreen = { at: now, v: hudVersion(), rects: out };
+    this.hudLocal.rt = -1;
+  }
+  private offHudResize = onHudResize(() => this.measureHud());
   private hudRects(): KeepOut[] {
     const now = performance.now();
     const hs = this.hudScreen;
-    if (hs.v !== hudVersion() || now - hs.at > 2000) {
-      const out: { l: number; t: number; r: number; b: number }[] = [];
-      const sel = '#lunch .lhud .cur, #lunch .lhud .lvl, #lunch .lhud .timer, #lunch .lhud .match, #lunch .lhud .pend, #lunch .lhud .dname, #lunch .lportrait, #lunch .bossbar.on, #lunch .slots .slot, #lunch .endbtn';
-      for (const el of Array.from(document.querySelectorAll<HTMLElement>(sel))) {
-        if (el.offsetParent === null) continue;
-        const r = el.getBoundingClientRect();
-        if (r.width < 1 || r.height < 1) continue;
-        out.push({ l: r.left, t: r.top, r: r.right, b: r.bottom });
-      }
-      this.hudScreen = { at: now, v: hudVersion(), rects: out };
-      this.hudLocal.rt = -1;
-    }
+    if (hs.v !== hudVersion() || now - hs.at > 2000) this.measureHud(now);
     if (this.hudLocal.rt === this.rt) return this.hudLocal.rects;
     /* 화면 → 숫자 좌표 변환이 그대로면(흔들림·줌 없음) 지난 값 그대로 */
     const wt = this.L.nums.worldTransform;
@@ -1320,6 +1403,7 @@ export class LunchView implements LunchEvents {
       this.nums.pxK = onPx > 0 ? 1 / onPx : 0;
     }
     /* 대상 */
+    const ghostK = 1 - Math.pow(1 - FX.persuade.ghostLerp, rt * 60);
     const pills = this.pillBuf;
     let nPill = 0;
     for (const tv of this.tvs.values()) {
@@ -1330,7 +1414,7 @@ export class LunchView implements LunchEvents {
       }
       if (!tv.body.visible) {
         tv.body.visible = true;
-        tv.shadow.visible = true;
+        tv.shadow.alpha = 1;
         this.parts.burst(T('fx.smoke'), e.x, e.y, FX.appear.dust, { spMin: 30 * pk, spMax: 110 * pk, life: 0.55, s0: 0.35 * pk, s1: 0.8 * pk, a0: 0.75, up: 20, drag: 3 });
       }
       if (tv.appear < 1) {
@@ -1380,12 +1464,15 @@ export class LunchView implements LunchEvents {
       const flip = e.road && e.rax === 'h' && e.rdir > 0 ? -1 : 1;
       tv.body.position.set(x, y - lift - (1 - Math.min(1, ap * 1.6)) * this.lot * 0.25);
       tv.spr.scale.set(sx * flip, sy);
-      tv.add.scale.copyFrom(tv.spr.scale);
+      /* 번쩍 스프라이트는 보일 때만 크기를 따라감(숨은 동안 매 프레임 쓰면 그만큼 갱신 목록에 오름) */
+      if (e.hit > 0) tv.add.scale.copyFrom(tv.spr.scale);
       /* 설득받는 중: 하얗게 깜빡(피격 느낌) */
       tv.add.alpha = hitOn ? (Math.sin(this.rt * 34 + tv.ph) > 0.35 ? 0.28 : 0.06) : 0;
-      tv.add.visible = hitOn;
+      /* 보이기는 설득받는 동안(e.hit)만 켜고, 히트스톱으로 잠깐 멈춘 동안은 알파 0 — 계약마다 오는 히트스톱 때 설득 중인 대상 전부가
+         껐다 켜지며 대상 층 그리기 목록을 두 번씩 새로 짰음. 보이는 모양은 같음 */
+      tv.add.visible = e.hit > 0;
       tv.body.rotation = wob;
-      tv.body.zIndex = y;
+      setZ(tv.body, y);
       /* 솔깃(입소문) 파란 틴트 */
       setTint(tv.spr, e.frz > 0 ? 0xa8dcff : 0xffffff);
       /* 깜빡(수명 끝) */
@@ -1423,42 +1510,44 @@ export class LunchView implements LunchEvents {
       if (e.damaged || e.boss) {
         const gg = this.gaugeFor(tv);
         const r = Math.max(0, e.hp / e.max);
-        gg.ghostR += (r - gg.ghostR) * (1 - Math.pow(1 - FX.persuade.ghostLerp, rt * 60));
+        gg.ghostR += (r - gg.ghostR) * ghostK;
         if (gg.ghostR < r) gg.ghostR = r;
         const k = gg.c.scale.x;
         const fw = gg.w / k;
-        gg.fill.width = Math.max(16, fw * r);
-        gg.fill.visible = r > 0.001;
-        gg.ghost.width = Math.max(16, fw * gg.ghostR);
+        /* 나인슬라이스 폭은 값이 같아도 쓸 때마다 모양을 다시 만듦 — 바뀐 때만 씀. 폭은 게이지 좌표 1 단위(화면 1px 미만)로 반올림:
+           후반엔 거의 모든 대상이 매 스텝 조금씩 깎여(자동 설득) 대상 수 × 2 장이 매 프레임 다시 만들어졌음 */
+        const fillW = Math.max(16, Math.round(fw * r));
+        if (gg.fill.width !== fillW) gg.fill.width = fillW;
+        gg.fill.alpha = r > 0.001 ? 1 : 0;
+        const ghostW = Math.max(16, Math.round(fw * gg.ghostR));
+        if (gg.ghost.width !== ghostW) gg.ghost.width = ghostW;
         setTint(gg.fill, e.boss ? 0xff8fab : hitOn ? 0xffd36b : 0x7dff8a);
         gg.c.position.set(x - gg.w / 2, y - tv.box * 0.8 - 14 * pk - gg.h - lift);
         gg.c.alpha = Math.min(1, ap * 2);
       }
       /* 배지: 수명 시계·솔깃 */
       if (e.warn && !tv.clock) {
-        tv.clock = new Sprite(T('fx.clock'));
-        tv.clock.anchor.set(0.5);
+        tv.clock = this.takeBadge(this.clockFree, 'fx.clock', 0.5);
         tv.clock.scale.set(pk);
-        this.L.gauges.addChild(tv.clock);
       }
       if (tv.clock) {
-        tv.clock.visible = e.warn;
+        /* 보이기는 알파로(visible 을 끄고 켜면 게이지 층 그리기 목록을 새로 짬) */
+        tv.clock.alpha = e.warn ? 1 : 0;
         tv.clock.position.set(x + tv.box * 0.42, y - tv.box * 0.72);
       }
       if (e.frz > 0 && !tv.wmark) {
-        tv.wmark = new Sprite(T('fx.womMark'));
-        tv.wmark.anchor.set(0.5, 1);
+        tv.wmark = this.takeBadge(this.wmarkFree, 'fx.womMark', 1);
         tv.wmark.scale.set(pk);
-        this.L.gauges.addChild(tv.wmark);
       }
       if (tv.wmark) {
-        tv.wmark.visible = e.frz > 0;
+        tv.wmark.alpha = e.frz > 0 ? 1 : 0;
         tv.wmark.position.set(x, y - tv.box * 0.85 - 18 * pk + Math.sin(this.rt * 6) * 3);
       }
       /* 새 거래처 알약·화살표(알약 자리는 루프 뒤에 서로 겹치지 않게 한꺼번에 잡음) */
-      const pp = this.pillPos(tv, x, y);
-      const pillLow = pp.low;
-      if (tv.pill) {
+      /* 알약·화살표가 있는 대상만 자리 계산 */
+      const pp = tv.pill || tv.arrow ? this.pillPos(tv, x, y) : null;
+      const pillLow = !!pp && pp.low;
+      if (tv.pill && pp) {
         tv.pillT -= rt;
         let q = pills[nPill];
         if (!q) q = pills[nPill] = { tv, x: 0, y: 0 };
@@ -1519,7 +1608,7 @@ export class LunchView implements LunchEvents {
           if (k >= 1) done = true;
           if (!tv.popped) {
             tv.popped = true;
-            if (tv.gauge) tv.gauge.c.visible = false;
+            if (tv.gauge) tv.gauge.c.alpha = 0;
             for (let h = 0; h < 2 + (Math.random() < 0.5 ? 1 : 0); h++)
               this.parts.emit(T('fx.heart'), { x: e.x + (Math.random() - 0.5) * tv.box * 0.5, y: e.y - tv.box * 0.6, vx: (Math.random() - 0.5) * 60, vy: -90 - Math.random() * 50, life: 0.9, s0: this.portK * 0.9, s1: this.portK * 0.6, a0: 1 });
             this.parts.burst(T('fx.smoke'), e.x, e.y, 5, { spMin: 30, spMax: 90, life: 0.5, s0: 0.35 * this.portK, s1: 0.8 * this.portK, a0: 0.7, up: 15 });
@@ -1534,9 +1623,10 @@ export class LunchView implements LunchEvents {
         tv.shadow.height = tv.box * 0.24 * s;
         if (tv.gauge) {
           const r = 0;
-          tv.gauge.fill.visible = r > 0;
+          tv.gauge.fill.alpha = r > 0 ? 1 : 0;
           tv.gauge.ghostR += (0 - tv.gauge.ghostR) * Math.min(1, rt * 8);
-          tv.gauge.ghost.width = Math.max(16, (tv.gauge.w / tv.gauge.c.scale.x) * tv.gauge.ghostR);
+          const ghostW = Math.max(16, Math.round((tv.gauge.w / tv.gauge.c.scale.x) * tv.gauge.ghostR));
+          if (tv.gauge.ghost.width !== ghostW) tv.gauge.ghost.width = ghostW;
         }
       } else if (tv.state === 'miss') {
         const k = Math.min(1, tv.leaveT / FX.leave.missSec);
@@ -1551,7 +1641,7 @@ export class LunchView implements LunchEvents {
       }
     }
     /* 번개 */
-    this.boltG.clear();
+    clearG(this.boltG);
     for (let i = this.bolts.length - 1; i >= 0; i--) {
       const b = this.bolts[i];
       b.t += rt;
@@ -1581,7 +1671,7 @@ export class LunchView implements LunchEvents {
       b.glows.forEach((g) => (g.alpha = a));
     }
     /* 프로모션 폭발 원 */
-    this.boomG.clear();
+    clearG(this.boomG);
     for (let i = this.booms.length - 1; i >= 0; i--) {
       const b = this.booms[i];
       b.t += rt;
@@ -1620,8 +1710,10 @@ export class LunchView implements LunchEvents {
           r.position.set(p.x, p.y);
           r.scale.x = Math.abs(r.scale.y) * (fx.vx > 0 ? -1 : 1);
           r.rotation = Math.sin(this.rt * 18 + j) * 0.12;
-          r.zIndex = p.y;
+          /* 앞뒤 순서는 어긋날 때만 맞춤(zIndex 를 매 프레임 쓰면 그 층 그리기 목록을 매번 새로 짬) */
+          setZ(r, p.y);
         });
+        sortByZ(v.c);
         if (Math.random() < rt * 20) this.parts.emit(T('fx.smoke'), { x: fx.x, y: fx.y, vx: -fx.vx * 0.1, vy: -20, life: 0.35, s0: 0.2 * this.portK, s1: 0.45 * this.portK, a0: 0.6 });
         if (Math.random() < rt * 14) this.parts.emit(T('fx.streak'), { x: fx.x - fx.vx * 0.06, y: fx.y - 30 * this.portK, life: 0.2, s0: this.portK, s1: this.portK * 0.5, a0: 0.7, rot: Math.atan2(fx.vy, fx.vx) });
       } else if (fx.type === 'qr') {
@@ -1713,7 +1805,9 @@ export class LunchView implements LunchEvents {
     this.rShadow.position.set(0, 3 * pk);
     this.rGlow.width = this.rGlow.height = R * 2.3 * pulse;
     this.rGlow.alpha = (anyIn ? 0.1 + Math.sin(this.rt * 6) * 0.03 : 0) + (this.rGold > 0 ? 0.25 : 0);
-    this.touchG.clear();
+    /* 알파 0 이어도 Pixi 는 그림(add 합성 · 반경 크기만큼 채움) — 안 보일 때는 빼 둠 */
+    this.rGlow.visible = this.rGlow.alpha > 0.002;
+    clearG(this.touchG);
     if (this.touch) {
       const x0 = lunch.net.x;
       const y0 = lunch.net.y + R;
@@ -1755,6 +1849,7 @@ export class LunchView implements LunchEvents {
     this.updateStamps(rt);
     this.updateBubbles(rt);
     this.camera.update(rt);
+    sortByZ(this.L.actors);
     /* fxTop 은 그릴 것이 있을 때만 루프가 그림(여기서 매 프레임 markFx 하지 않음, 설계서 7장 4) */
   }
 
@@ -1855,15 +1950,30 @@ export class LunchView implements LunchEvents {
     killDeep(tv.body);
     killDeep(tv.pill);
     tv.body.destroy({ children: true });
-    tv.shadow.destroy();
-    tv.gauge?.c.destroy({ children: true });
-    tv.clock?.destroy();
-    tv.wmark?.destroy();
+    /* 그림자·게이지·배지는 부수지 않고 알파·크기 0 으로 풀에 돌려줌(다음 대상이 다시 씀) */
+    park(tv.shadow);
+    this.shadowFree.push(tv.shadow);
+    if (tv.gauge) {
+      park(tv.gauge.c);
+      this.gaugeFree.push(tv.gauge);
+      tv.gauge = null;
+    }
+    if (tv.clock) {
+      park(tv.clock);
+      this.clockFree.push(tv.clock);
+      tv.clock = null;
+    }
+    if (tv.wmark) {
+      park(tv.wmark);
+      this.wmarkFree.push(tv.wmark);
+      tv.wmark = null;
+    }
     if (tv.pill) dropPill(tv.pill);
     tv.arrow?.destroy();
   }
 
   destroy(): void {
+    this.offHudResize();
     gsap.killTweensOf(this.camera);
     killDeep(this.root);
     for (const tv of this.tvs.values()) this.destroyTV(tv);

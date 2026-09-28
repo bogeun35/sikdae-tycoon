@@ -13,6 +13,125 @@ import { view } from '../game/core/stage';
 const FAMILY = FONT_STACK.map((f) => (f.includes(' ') ? `'${f}'` : f)).join(',');
 const DIGITS = '0123456789';
 
+/** CSS 색 → 알파를 k 배 한 rgba(캔버스가 정규화한 '#rrggbb' · 'rgba(r, g, b, a)' 를 읽어 씀) */
+function shadowRgba(g: CanvasRenderingContext2D, css: string, k: number): string {
+  const keep = g.fillStyle;
+  g.fillStyle = '#000';
+  g.fillStyle = css;
+  const s = String(g.fillStyle);
+  g.fillStyle = keep;
+  let r = 0;
+  let gr = 0;
+  let b = 0;
+  let a = 1;
+  const hx = /^#([0-9a-f]{6})$/i.exec(s);
+  if (hx) {
+    const n = parseInt(hx[1], 16);
+    r = (n >> 16) & 255;
+    gr = (n >> 8) & 255;
+    b = n & 255;
+  } else {
+    const m = /rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)/i.exec(s);
+    if (!m) return s;
+    r = +m[1];
+    gr = +m[2];
+    b = +m[3];
+    a = m[4] !== undefined ? +m[4] : 1;
+  }
+  return `rgba(${r},${gr},${b},${+(a * k).toFixed(3)})`;
+}
+
+/**
+ * 글자 칸: 같은 글꼴·색·그림자·캔버스 높이·기준선이면 글자 하나를 작은 캔버스에 한 번만 그려 두고 drawImage 로 찍는다.
+ * 짧은 글자(스킬 재사용 초 "2.5" · 남은 시간 "27.7")는 0.1초마다 바뀌어 그때마다 fillText(글자 모양 잡기·래스터)를 불렀음 —
+ * 폰 4배 느림 후반 측정에서 남은 시간 한 번 2.5ms, 스킬 초 한 칸 약 1ms. 글자 칸 찍기는 글자당 drawImage 하나라 짧은 글자에서 싸다
+ * (긴 금액 글자는 글자 수만큼 찍어야 해서 fillText 그대로). 모양이 같게: 칸 안 기준선 = 캔버스 기준선, 가로는 글자 폭(+자간)만큼 이어 찍음
+ */
+export class Glyphs {
+  private key = '';
+  private cells = new Map<string, HTMLCanvasElement | null>();
+  private adv = new Map<string, number>();
+  private font = '16px sans-serif';
+  private fill = '#000';
+  private sh: { c: string; x: number; y: number } | null = null;
+  private h = 1;
+  private y = 0;
+  private base: CanvasTextBaseline = 'alphabetic';
+  private ls = 0;
+  private pad = 2;
+  private m: CanvasRenderingContext2D | null = null;
+  /** 모양(기기 픽셀 글꼴 · 글꼴 px · 색 · 그림자(기기 px) · 캔버스 높이 · 기준선 y · 기준선 종류 · 자간(기기 px))이 바뀌면 칸을 비움 */
+  config(font: string, px: number, fill: string, sh: { c: string; x: number; y: number } | null, h: number, y: number, base: CanvasTextBaseline, ls: number): void {
+    const key = `${font}|${fill}|${sh ? `${sh.c},${sh.x},${sh.y}` : ''}|${h}|${y.toFixed(2)}|${base}|${ls}`;
+    if (key === this.key) return;
+    this.key = key;
+    this.cells.clear();
+    this.adv.clear();
+    this.font = font;
+    this.fill = fill;
+    this.sh = sh;
+    this.h = Math.max(1, Math.round(h));
+    this.y = y;
+    this.base = base;
+    this.ls = ls;
+    this.pad = Math.ceil(px * 0.2 + (sh ? Math.abs(sh.x) + Math.abs(sh.y) : 0)) + 2;
+    if (!this.m) this.m = document.createElement('canvas').getContext('2d');
+    if (this.m) this.m.font = font;
+  }
+  /** 글자 하나가 차지하는 폭(기기 px, 자간 포함) */
+  advance(ch: string): number {
+    let a = this.adv.get(ch);
+    if (a === undefined) {
+      a = this.m ? this.m.measureText(ch).width : 0;
+      this.adv.set(ch, a);
+    }
+    return a + this.ls;
+  }
+  /** 글자 줄 폭(끝 자간 빼고) */
+  width(text: string): number {
+    let w = 0;
+    for (const ch of text) w += this.advance(ch);
+    return text ? w - this.ls : 0;
+  }
+  /** x = 첫 글자 왼쪽(기기 px). 대상 캔버스는 그림자를 꺼 둔 상태여야 함(칸에 그림자가 구워져 있음) */
+  draw(g: CanvasRenderingContext2D, text: string, x: number): void {
+    for (const ch of text) {
+      if (ch !== ' ') {
+        const c = this.cell(ch);
+        if (c) g.drawImage(c, Math.round(x) - this.pad, 0);
+      }
+      x += this.advance(ch);
+    }
+  }
+  private cell(ch: string): HTMLCanvasElement | null {
+    let c = this.cells.get(ch);
+    if (c !== undefined) return c;
+    c = document.createElement('canvas');
+    c.width = Math.max(1, Math.ceil(this.advance(ch) - this.ls + this.pad * 2));
+    c.height = this.h;
+    const q = c.getContext('2d');
+    if (!q) c = null;
+    else {
+      q.font = this.font;
+      q.fillStyle = this.fill;
+      q.textAlign = 'left';
+      q.textBaseline = this.base;
+      if (this.sh) {
+        q.shadowBlur = 0;
+        q.shadowColor = this.sh.c;
+        q.shadowOffsetX = this.sh.x;
+        q.shadowOffsetY = this.sh.y;
+      }
+      q.fillText(ch, this.pad, this.y);
+    }
+    this.cells.set(ch, c);
+    return c;
+  }
+}
+
+/** 이 글자 수 이하는 글자 칸으로 찍음(스킬 재사용 초) */
+const SHORT = 5;
+
 export class CanvasNum {
   private cv: HTMLCanvasElement;
   private g: CanvasRenderingContext2D | null;
@@ -35,6 +154,10 @@ export class CanvasNum {
   private font = '16px sans-serif';
   private stateOk = false;
   private lsNative = false;
+  /** 캔버스에 그림자가 켜져 있는지(글자 칸으로 찍을 때는 끔) · 그림자 색 */
+  private shadowLive = false;
+  private shRgba = 'transparent';
+  private glyphs: Glyphs | null = null;
   /** 글자 폭 캐시(CSS px, 배치가 바뀌면 비움) */
   private cw = new Map<string, number>();
   private wOf(ch: string): number {
@@ -99,8 +222,24 @@ export class CanvasNum {
     g.fillStyle = this.color;
     g.textBaseline = 'alphabetic';
     g.textAlign = 'left';
-    /* 그림자는 흐림 없이 한 번 더 찍음(캔버스 shadowBlur 는 그릴 때마다 흐림 계산이라 0.1초마다 바뀌는 스킬 초 4칸에서 가장 비쌌음) */
-    g.shadowColor = 'transparent';
+    /*
+     * 그림자는 흐림 없이(캔버스 shadowBlur 는 그릴 때마다 흐림 계산이라 0.1초마다 바뀌는 스킬 초 4칸에서 가장 비쌌음).
+     * 캔버스 그림자(흐림 0 · 오프셋만)로 글자와 한 번에 찍음 — 예전처럼 fillText 를 두 번 부르면 글자 모양 잡기(셰이핑)도 두 번이었음.
+     * 색은 그림자색 × 0.75 알파(예전 globalAlpha 0.75 로 한 번 더 찍던 것과 같은 모양)
+     */
+    g.shadowBlur = 0;
+    if (this.sh) {
+      this.shRgba = shadowRgba(g, this.sh.c, 0.75);
+      g.shadowColor = this.shRgba;
+      g.shadowOffsetX = this.sh.x * k;
+      g.shadowOffsetY = Math.max(1, this.sh.y) * k;
+      this.shadowLive = true;
+    } else {
+      this.shadowLive = false;
+      g.shadowColor = 'transparent';
+      g.shadowOffsetX = 0;
+      g.shadowOffsetY = 0;
+    }
     /* 자간은 캔버스 letterSpacing 이 있으면 한 번에(없는 브라우저는 글자마다 그림) */
     const gl = g as unknown as { letterSpacing?: string };
     this.lsNative = this.ls !== 0 && typeof gl.letterSpacing === 'string';
@@ -159,13 +298,23 @@ export class CanvasNum {
     /* CSS 줄 상자와 같은 기준선: (줄 높이 − 글꼴 높이)/2 + 위 높이 */
     const y = ((h - (this.asc + this.desc)) / 2 + this.asc) * k;
     const x0 = pad * k;
-    if (this.sh) {
-      g.fillStyle = this.sh.c;
-      g.globalAlpha = 0.75;
-      g.fillText(text, x0 + this.sh.x * k, y + Math.max(1, this.sh.y) * k);
-      g.globalAlpha = 1;
-      g.fillStyle = this.color;
+    if (text.length <= SHORT) {
+      /* 짧은 글자: 글자 칸으로 찍음(칸에 그림자가 구워져 있어 캔버스 그림자는 끔) */
+      if (this.shadowLive) {
+        g.shadowColor = 'transparent';
+        this.shadowLive = false;
+      }
+      const gl = this.glyphs || (this.glyphs = new Glyphs());
+      const sh = this.sh ? { c: this.shRgba, x: this.sh.x * k, y: Math.max(1, this.sh.y) * k } : null;
+      gl.config(this.font, parseFloat(this.font) || 16, this.color, sh, this.cv.height, y, 'alphabetic', this.ls * k);
+      gl.draw(g, text, x0);
+      return changed;
     }
+    if (this.sh && !this.shadowLive) {
+      g.shadowColor = this.shRgba;
+      this.shadowLive = true;
+    }
+    /* 그림자는 캔버스 상태(applyState)로 같이 찍힘 */
     if (this.ls === 0 || this.lsNative) g.fillText(text, x0, y);
     else {
       let x = x0;

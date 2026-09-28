@@ -9,8 +9,9 @@ import gsap from 'gsap';
 import { FONT_STACK } from '../../fonts';
 import { FXL, fxApp, markFx, view } from '../core/stage';
 import { T } from '../core/tex';
-import { detachCached, releaseText, takeText } from '../core/textcache';
-import { FX } from '../data';
+import { detachCached, takeText } from '../core/textcache';
+import { FX, ITEMS } from '../data';
+import { S } from '../state';
 import { sfx } from '../deps';
 import { Particles } from './particles';
 import { breath } from '../map/today';
@@ -26,9 +27,10 @@ export function hudAnchor(id: HudId): { x: number; y: number } | null {
   return anchorFn(id);
 }
 
-const conf = new Particles(50);
-const sparks = new Particles(160);
-const flyLayer = new Container();
+/* 파티클·날아가는 코인 층은 따로 묶음(쉬는 스프라이트를 층에 두므로 배너·컷·폭죽이 생기고 사라질 때 같이 다시 짜지 않게) */
+const conf = new Particles(50, true);
+const sparks = new Particles(160, true);
+const flyLayer = new Container({ isRenderGroup: true });
 const cutLayer = new Container();
 const bannerLayer = new Container();
 let inited = false;
@@ -58,12 +60,15 @@ export function flyCoin(key: string, from: { x: number; y: number }, to: HudId, 
   if (flies.length >= MAX_FLY) return false;
   const end = hudAnchor(to);
   if (!end) return false;
-  const sp = flyPool.pop() || new Sprite();
+  /* 다 날아간 스프라이트는 층에 붙인 채 알파 0 으로 둠(붙였다 떼면 그때마다 fxTop 그리기 목록을 새로 짬). 기다리는 동안도 알파 0 */
+  let sp = flyPool.pop();
+  if (!sp) {
+    sp = new Sprite();
+    sp.anchor.set(0.5);
+    flyLayer.addChild(sp);
+  }
   sp.texture = T(key);
-  sp.anchor.set(0.5);
-  sp.visible = delay <= 0;
-  sp.alpha = 1;
-  flyLayer.addChild(sp);
+  sp.alpha = delay <= 0 ? 1 : 0;
   const dx = end.x - from.x;
   const dy = end.y - from.y;
   const dist = Math.hypot(dx, dy);
@@ -82,7 +87,7 @@ function updateFlies(dt: number): void {
     if (f.delay > 0) {
       f.delay -= dt;
       if (f.delay > 0) continue;
-      f.sp.visible = true;
+      f.sp.alpha = 1;
     }
     f.t += dt;
     const k = Math.min(1, f.t / f.dur);
@@ -93,8 +98,8 @@ function updateFlies(dt: number): void {
     f.sp.scale.set(f.s0 * (1 + (FX.coinFly.endScale - 1) * e) * (1 + Math.sin(k * Math.PI) * 0.25));
     f.sp.rotation += dt * 6;
     if (k >= 1) {
-      f.sp.visible = false;
-      flyLayer.removeChild(f.sp);
+      f.sp.alpha = 0;
+      f.sp.scale.set(0);
       flyPool.push(f.sp);
       flies.splice(i, 1);
       arriveFn(f.id);
@@ -216,7 +221,7 @@ const queue: BannerReq[] = [];
 /** 영업 시작 알약 등으로 잠깐 쉬는 시간(초) */
 let bannerHold = 0;
 /** 화면에 떠 있는 배너는 늘 한 장. age = 보인 시간(초), leaving = 다음 배너에 자리를 비키는 중 */
-let curBanner: { base: string; count: number; txt: Text; c: Container; out: gsap.core.Tween; y0: number; age: number; leaving: boolean; minShow: number; sub?: string; sub2?: string; outAt: number } | null = null;
+let curBanner: { base: string; count: number; txt: Container; c: Container; out: gsap.core.Tween; y0: number; age: number; leaving: boolean; minShow: number; sub?: string; sub2?: string; outAt: number } | null = null;
 /** 배너가 사라지는 트윈(합쳐지면 다시 걸어 끝까지 보이게) */
 function bannerOut(c: Container, y0: number, delay: number, dur = 0.35): gsap.core.Tween {
   return gsap.to(c, { alpha: 0, y: y0 - 40, duration: dur, delay, ease: 'power2.in', onComplete: () => { gsap.killTweensOf(c.scale); detachCached(c); c.destroy({ children: true }); } });
@@ -228,6 +233,37 @@ const BN_S2 = { fontFamily: FONT_STACK, fontSize: 56, fill: '#ffe066', stroke: {
 const RAY_N = (cp: boolean) => ({ fontFamily: FONT_STACK, fontSize: cp ? 44 : 60, fill: '#ffffff', stroke: { color: '#5c3a1a', width: 9, join: 'round' as const }, dropShadow: { color: '#5c3a1a', distance: 4, blur: 0, alpha: 0.6, angle: Math.PI / 2 } });
 const RAY_S = (cp: boolean) => ({ fontFamily: FONT_STACK, fontSize: cp ? 30 : 38, fill: '#fff4c4', stroke: { color: '#5c3a1a', width: 7, join: 'round' as const } });
 const bannerTitle = (label: string, n: number) => (n > 1 ? `${label} ×${n}` : label);
+/**
+ * 배너 제목 = 이름 글자 + ×N 글자(따로 캐시). 예전에는 '대형 계약 ×2' 처럼 숫자가 바뀔 때마다 제목 전체를 새 글자로 그려
+ * 폰 4배 느림에서 fxTop 글자 한 장(1024×256) 올리는 데만 40ms 였음. 이름은 미리 그려 둔 것, ×N 은 작은 글자라 한 번 그리면 계속 씀.
+ * 가운데 정렬·세로 기준(0.55)은 예전 한 줄 글자와 같게
+ */
+const COUNT_GAP = 14;
+function titleNode(label: string, n: number): Container {
+  const box = new Container();
+  box.label = 'title';
+  const t = takeText('bn-t', label, BN_T);
+  t.anchor.set(0, 0.55);
+  box.addChild(t);
+  let w = t.width;
+  if (n > 1) {
+    const c = takeText('bn-t', `×${n}`, BN_T);
+    c.anchor.set(0, 0.55);
+    c.x = w + COUNT_GAP;
+    box.addChild(c);
+    w = c.x + c.width;
+  }
+  for (const ch of box.children) ch.x -= w / 2;
+  (box as Container & { titleText?: string }).titleText = bannerTitle(label, n);
+  return box;
+}
+/** 제목 묶음(titleNode)을 떼어 냄: 캐시 글자는 돌려주고 묶음만 부숨 */
+function dropTitle(box: Container | null | undefined): void {
+  if (!box || box.destroyed) return;
+  detachCached(box);
+  box.parent?.removeChild(box);
+  box.destroy();
+}
 /** 떠 있는 배너가 새로 생긴 도장·금액 띠를 덮으면 비킬 자리로 옮김(사라지는 트윈도 새 자리 기준으로 다시) */
 function dodgeCurrent(): void {
   const cb = curBanner;
@@ -270,11 +306,10 @@ export function banner(label: string, sub?: string, sub2?: string, now = false, 
     {
       /* ×N 글자는 캐시 글자로 갈아 끼움(떠 있는 글자를 다시 그리지 않음) */
       const old = cb.txt;
-      const nt = takeText('bn-t', bannerTitle(label, cb.count), BN_T);
-      nt.anchor.set(0.5, 0.55);
+      const nt = titleNode(label, cb.count);
       const at = old.parent === cb.c ? cb.c.getChildIndex(old) : cb.c.children.length;
       cb.c.addChildAt(nt, at);
-      releaseText(old);
+      dropTitle(old);
       cb.txt = nt;
     }
     gsap.fromTo(cb.c.scale, { x: 1.12, y: 1.12 }, { x: 1, y: 1, duration: 0.25, ease: 'back.out(3)' });
@@ -315,8 +350,7 @@ function showBanner(b: BannerReq): void {
   ns.width = w;
   ns.height = 150;
   ns.pivot.set(w / 2, 75);
-  const txt = takeText('bn-t', bannerTitle(b.label, b.count), BN_T);
-  txt.anchor.set(0.5, 0.55);
+  const txt = titleNode(b.label, b.count);
   c.addChild(ns, txt);
   if (b.sub) {
     /* 금액이 든 부제(첫 결제 연결 +N원 등)는 캐시하지 않음 — 대상 이름 부제만 다시 씀 */
@@ -456,16 +490,38 @@ function lvText(lv: number, land: boolean): BitmapText {
   return new BitmapText({ text: `LEVEL UP! ${lv}`, style: { fontFamily: LV_FONT, fontSize: land ? LV_BASE : 92 } });
 }
 /**
- * 영업 시작 전(와이프가 덮은 동안) fxTop 글자 미리 만들기(설계서 7장): 배너 제목 · 대상 이름 줄 · 다음 LEVEL UP.
- * 글자를 캔버스에 그리고 GPU 에 올리는 일이 첫 배너 프레임에 몰려 긴 작업(폰 4배 느림 100~200ms)이 되던 것
+ * 영업 중에 뜰 수 있는 fxTop 글자(설계서 7장): 배너 제목 · ×N · 대상 이름 줄 · 아직 없는 아이템의 컷 글자(이름·효과).
+ * 영업 중 처음 뜨는 글자는 캔버스에 그리고 GPU 에 올리는 일이 그 프레임에 몰려 긴 작업(폰 4배 느림 글자 한 장 10~40ms)이 됨
+ */
+function warmList(subs: string[]): Container[] {
+  const titles = ['대형 계약', '전국 계약', FX.firstSeen.label, FX.pendingRelease.banner, (FX.eventText.boss as unknown as [string])[0]];
+  const list: Container[] = [...titles.map((t) => takeText('bn-t', t, BN_T)), ...[2, 3, 4, 5, 6].map((n) => takeText('bn-t', `×${n}`, BN_T)), ...subs.map((s) => takeText('bn-s', s, BN_S))];
+  for (const it of ITEMS) {
+    if (S.items[it.id]) continue;
+    list.push(takeText('ray-n-c', it.name, RAY_N(true)));
+    if (it.u) list.push(takeText('ray-s-c', it.u, RAY_S(true)));
+  }
+  return list;
+}
+/** 글자 몇 개를 작은 렌더 타깃에 그려 텍스처를 만들어 둠(이미 있으면 할 일 없음) */
+function drawInto(objs: Container[], rt: RenderTexture, box: Container): void {
+  for (const o of objs) box.addChild(o);
+  try {
+    fxApp.renderer.render({ container: box, target: rt, clear: true });
+  } catch {
+    /* 무시 */
+  }
+  box.removeChildren();
+}
+/**
+ * 영업 시작 전(와이프가 덮은 동안) fxTop 글자 미리 만들기: warmList + 다음 LEVEL UP.
+ * 사무실에서 idleWarmTop 이 미리 해 두면 여기서는 거의 할 일 없음(캐시 글자는 GC 로 내려가지 않음)
  */
 export async function warmTop(subs: string[], nextLv: number): Promise<void> {
-  const r = fxApp.renderer;
   const rt = RenderTexture.create({ width: 8, height: 8 });
   const box = new Container();
   const land = view.orient === 'land';
-  const titles = ['대형 계약', '전국 계약', FX.firstSeen.label, FX.pendingRelease.banner, (FX.eventText.boss as unknown as [string])[0]];
-  const list: Container[] = [...titles.map((t) => takeText('bn-t', t, BN_T)), ...subs.map((s) => takeText('bn-s', s, BN_S))];
+  const list = warmList(subs);
   if (!lvPrep || lvPrep.lv !== nextLv || lvPrep.land !== land || lvPrep.t.destroyed) {
     lvPrep?.t.destroy();
     lvPrep = { lv: nextLv, land, t: lvText(nextLv, land) };
@@ -473,19 +529,43 @@ export async function warmTop(subs: string[], nextLv: number): Promise<void> {
   list.push(lvPrep.t);
   try {
     for (let i = 0; i < list.length; i += 3) {
-      for (const o of list.slice(i, i + 3)) box.addChild(o);
-      try {
-        r.render({ container: box, target: rt, clear: true });
-      } catch {
-        /* 무시 */
-      }
-      box.removeChildren();
+      drawInto(list.slice(i, i + 3), rt, box);
       await breath();
     }
   } finally {
     box.destroy();
     rt.destroy(true);
   }
+}
+/**
+ * 사무실 여유 시간에 warmList 를 한 장씩 나눠 그림(한 번에 하나 · 0.1초 간격 — 긴 작업 없이). 영업에 들어가면 멈추고 warmTop 이 나머지를 함
+ * busy() = 그만둘 때(영업에 들어감). 화면 전환(와이프) 중에는 쉬었다가 이어서
+ */
+let idleWarmOn = false;
+export function idleWarmTop(subs: string[], busy: () => boolean): void {
+  if (idleWarmOn) return;
+  idleWarmOn = true;
+  const list = warmList(subs);
+  const rt = RenderTexture.create({ width: 8, height: 8 });
+  const box = new Container();
+  let i = 0;
+  const step = (): void => {
+    if (wipeK >= 0) {
+      /* 화면 전환 중에는 쉬었다가 */
+      setTimeout(step, 200);
+      return;
+    }
+    if (i >= list.length || busy()) {
+      box.destroy();
+      rt.destroy(true);
+      idleWarmOn = false;
+      return;
+    }
+    const o = list[i++];
+    if (!o.destroyed && !o.parent) drawInto([o], rt, box);
+    setTimeout(step, 100);
+  };
+  setTimeout(step, 200);
 }
 /** 절정(보스 계약) 동안은 LEVEL UP 글자를 미뤘다가 끝나면 띄움(전국 계약 배너·도장과 한 화면에 겹치지 않게) */
 let climaxLeft = 0;
@@ -677,6 +757,8 @@ function updateDim(dt: number): void {
   const k = Math.min(1, dt * (to > dimG.alpha ? 9 : 3));
   dimG.alpha += (to - dimG.alpha) * k;
   if (dimG.alpha < 0.005 && to === 0) dimG.alpha = 0;
+  /* 알파 0 인 전화면 가림도 Pixi 는 그림 — 안 보일 때는 빼 둠(fxTop 을 그리는 프레임마다 전화면 한 장을 채우던 것) */
+  dimG.visible = dimG.alpha > 0;
   if (dimG.alpha > 0) markFx();
 }
 
@@ -774,6 +856,9 @@ export function clearTop(): void {
 /** 검수용: 화면에 보이는 배너 수 · 줄 선 배너 수 · 미뤄 둔 LEVEL UP */
 export function bannerStat(): { shown: number; queued: number; lvPending: number; texts: string[] } {
   const vis = bannerLayer.children.filter((c) => !c.destroyed && c.alpha > 0.05);
-  const texts = vis.map((c) => (c.children.find((k) => k instanceof Text) as Text | undefined)?.text || '');
+  const texts = vis.map((c) => {
+    const tb = c.children.find((k) => k.label === 'title') as (Container & { titleText?: string }) | undefined;
+    return tb?.titleText || (c.children.find((k) => k instanceof Text) as Text | undefined)?.text || '';
+  });
   return { shown: vis.length, queued: queue.length, lvPending, texts };
 }

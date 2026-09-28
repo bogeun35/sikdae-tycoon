@@ -11,7 +11,7 @@ import type { HudId } from '../game/fx/top';
 import { domToFx, onLayout, view } from '../game/core/stage';
 import { $, $$, bump, el, img, restartClass } from './dom';
 import { FONT_STACK } from '../fonts';
-import { CanvasNum } from './cnum';
+import { CanvasNum, Glyphs } from './cnum';
 
 /**
  * HUD 배치 버전(설계서 7장 3): 레이아웃·영업 HUD 줄 배치·보스 게이지·결제 대기 알약이 바뀌면 +1.
@@ -279,6 +279,10 @@ export class LunchHud {
     this.endBtn = $(this.root, '[data-a="end"]') as HTMLButtonElement;
     this.fsBtn = $(this.root, '[data-a="fs"]') as HTMLButtonElement;
     parent.appendChild(this.root);
+    {
+      const ro = hudObserver();
+      if (ro) for (const e of $$(this.root, '.lhud .cur, .lhud .lvl, .lhud .timer, .lhud .match, .lhud .pend, .lhud .dname, .lportrait, .bossbar, .slots .slot, .endbtn')) ro.observe(e);
+    }
     const st = document.createElement('style');
     st.textContent = `#ui.land .portP { display:none; } #ui.port .portL { display:none; }`;
     document.head.appendChild(st);
@@ -353,6 +357,8 @@ export class LunchHud {
     this.gain = { gmv: 0, revenue: 0, tech: 0 };
     this.last = {};
     this.cache.clear();
+    this.pendA.clear();
+    this.pendB.clear();
     this.slow = 1;
     bumpHudVersion();
     const d = DISTRICT_BY[S.district];
@@ -391,10 +397,13 @@ export class LunchHud {
    * 남은 시간 글자는 작은 캔버스에 그린다(설계서 7장 3): 0.1초마다 바뀌는 DOM 글자는 그때마다 레이아웃을 부름.
    * 캔버스는 칸 크기가 고정이라 다시 그려도 레이아웃이 없다. 크기·색은 HUD 배치가 바뀌거나 5초 경고 색이 바뀔 때만 다시 잰다
    */
-  private tt: { cv: HTMLCanvasElement | null; key: string; color: string; px: number; dpr: number; font: string } = { cv: null, key: '', color: '#5c3a1a', px: 25, dpr: 1, font: '25px sans-serif' };
+  private tt: { cv: HTMLCanvasElement | null; g: CanvasRenderingContext2D | null; key: string; color: string; px: number; dpr: number; font: string; set: boolean } = { cv: null, g: null, key: '', color: '#5c3a1a', px: 25, dpr: 1, font: '25px sans-serif', set: false };
   private drawTimer(v: string): void {
     const T0 = this.tt;
-    if (!T0.cv || !T0.cv.isConnected) T0.cv = this.one('.ttc') as HTMLCanvasElement | null;
+    if (!T0.cv || !T0.cv.isConnected) {
+      T0.cv = this.one('.ttc') as HTMLCanvasElement | null;
+      T0.g = null;
+    }
     const cv = T0.cv;
     if (!cv) return;
     /* 다시 잴 때 = 화면 배치(#ui 클래스·배율·첫 줄 클래스)나 5초 경고 색이 바뀔 때. hudVersion 은 숫자 길이만 바뀌어도 올라 매번 강제 레이아웃이 났음 */
@@ -412,22 +421,31 @@ export class LunchHud {
       const h = Math.max(1, Math.round(r.height * dpr));
       if (cv.width !== w) cv.width = w;
       if (cv.height !== h) cv.height = h;
+      /* 크기를 바꾸면 그리기 상태(글꼴·정렬)가 초기화됨 → 다시 설정 */
+      T0.set = false;
       const cs = getComputedStyle(cv.parentElement || cv);
       T0.color = cs.color || '#5c3a1a';
       T0.px = parseFloat(cs.fontSize) || 25;
       T0.dpr = dpr;
       T0.font = `${Math.round(T0.px * dpr)}px ${FONT_STACK.map((f) => (f.includes(' ') ? `'${f}'` : f)).join(',')}`;
+      T0.set = false;
     }
-    /* 작은 캔버스는 CPU 그리기가 싸다(가속 캔버스는 0.1초마다 GPU 래스터 명령을 메인 스레드에서 만듦) */
-    const g = cv.getContext('2d', { willReadFrequently: true });
+    /* 기본 캔버스(HUD 숫자 cnum 과 같게). willReadFrequently(CPU 즉시 그리기)는 fillText 자리에서 바로 래스터해 폰 4배 느림 후반 측정에서
+       한 번에 2.8ms(캔버스 숫자 한 장의 약 3배)였음 — 기본 캔버스는 그리기를 모아 두었다가 화면에 올릴 때 그림.
+       그리기 상태(글꼴 문자열 해석 등)는 바뀔 때만 설정 — 0.1초마다 글꼴을 다시 넣으면 그때마다 글꼴을 다시 해석함 */
+    if (!T0.g) {
+      T0.g = cv.getContext('2d');
+      T0.set = false;
+    }
+    const g = T0.g;
     if (!g) return;
     g.clearRect(0, 0, cv.width, cv.height);
-    g.font = T0.font;
-    g.fillStyle = T0.color;
-    g.textAlign = 'center';
-    g.textBaseline = 'middle';
-    g.fillText(v, cv.width / 2, cv.height * 0.55);
+    /* 글자 칸으로 찍음(cnum.ts Glyphs): 가운데 정렬 = 글자 줄 폭의 반만큼 왼쪽에서 시작, 기준선 middle · 높이 0.55 는 예전 fillText 와 같게 */
+    const gl = this.ttGlyphs;
+    gl.config(T0.font, Math.round(T0.px * T0.dpr), T0.color, null, cv.height, cv.height * 0.55, 'middle', 0);
+    gl.draw(g, v, cv.width / 2 - gl.width(v) / 2);
   }
+  private ttGlyphs = new Glyphs();
   setSpeed(sp: number): void {
     const e = $(this.root, '[data-v="spd"]');
     if (e) e.textContent = sp !== 1 ? ` ×${sp}` : '';
@@ -436,10 +454,35 @@ export class LunchHud {
   private slow = 1;
   private domTick = 0;
   private domForce = false;
+  /**
+   * 캔버스 숫자 그리기 대기열: A = 재화·이번 판 +N, B = 스킬 재사용 초. 한 프레임에 한 묶음만 그림(설계서 7장 3 — 10Hz 는 그대로).
+   * 30fps 에서는 갱신 프레임에 A, 다음 프레임에 B 라 둘 다 초당 10번. 기기가 느려 프레임마다 갱신 차례가 오면(폰 4배 느림 후반 8fps)
+   * 두 묶음이 번갈아 그려져 한 프레임에 캔버스 9장을 한꺼번에 그리지 않음(글자 그리기가 영업 HUD 비용의 대부분)
+   */
+  private pendA = new Map<CanvasNum, [string, string]>();
+  private pendB = new Map<CanvasNum, [string, string]>();
+  private lastGroup: 'A' | 'B' = 'B';
+  private flushNums(): void {
+    const A = this.pendA;
+    const B = this.pendB;
+    if (!A.size && !B.size) return;
+    const pick = this.lastGroup === 'A' ? (B.size ? B : A) : A.size ? A : B;
+    this.lastGroup = pick === A ? 'A' : 'B';
+    let widthMaybe = false;
+    for (const [c, [v, ver]] of pick) if (c.set(v, ver) && pick === A) widthMaybe = true;
+    pick.clear();
+    /* 폭이 바뀐 것은 HUD 배치 버전을 올리지 않음 — 자리는 ResizeObserver 가 레이아웃 직후에 새로 잼(onHudResize) */
+    if (widthMaybe) this.fitRow();
+  }
   update(lunch: { cN: number; rN: number; M: number; matchStep: number; cd: Record<string, number>; lacking(): 'corp' | 'store' | null; cooldown(id: SkillId): number }, dt = 0.1): void {
     this.slow += dt;
-    if (this.slow < 0.1) return;
-    this.slow = 0;
+    if (this.slow >= 0.1) {
+      this.slow = 0;
+      this.tick(lunch);
+    }
+    this.flushNums();
+  }
+  private tick(lunch: { cN: number; rN: number; M: number; matchStep: number; cd: Record<string, number>; lacking(): 'corp' | 'store' | null; cooldown(id: SkillId): number }): void {
     this.place();
     /* DOM 글자(레벨·경험치·매칭·결제 대기)는 0.5초마다 한 번에 씀 — 글자가 바뀐 프레임마다 레이아웃이라 10Hz 면 초당 최대 10번(설계서 7장 3: ≤ 3회/초).
        자주 바뀌는 재화·+N·스킬 재사용 숫자는 캔버스(레이아웃 없음), 막대는 transform */
@@ -458,7 +501,7 @@ export class LunchHud {
       this.last[k] = v;
       /* 캔버스 숫자는 칸 크기가 실제로 바뀐 때만 HUD 배치를 다시 잼(글자 길이만 바뀌어서는 안 잼 — 잴 때마다 강제 레이아웃) */
       if (k === 'gmv' || k === 'revenue' || k === 'tech') {
-        for (const e of this.all(`${row}[data-v="${k}"]`)) if (this.cnum(e).set(v, ver)) widthMaybe = true;
+        for (const e of this.all(`${row}[data-v="${k}"]`)) this.pendA.set(this.cnum(e), [v, ver]);
       } else {
         if (!had || old.length !== v.length) widthMaybe = true;
         for (const e of this.all(`[data-v="${k}"]`)) e.textContent = v;
@@ -489,7 +532,7 @@ export class LunchHud {
       const old = this.last['g' + k];
       if (old === v) return;
       this.last['g' + k] = v;
-      for (const e of this.all(`${row}[data-g="${k}"]`)) if (this.cnum(e).set(v, ver)) widthMaybe = true;
+      for (const e of this.all(`${row}[data-g="${k}"]`)) this.pendA.set(this.cnum(e), [v, ver]);
     };
     g('revenue');
     g('tech');
@@ -539,10 +582,7 @@ export class LunchHud {
       }
       if (show) setDom('pendt', `결제 대기 ${fmt(S.pendG)}원`);
     }
-    if (widthMaybe) {
-      this.fitRow();
-      bumpHudVersion();
-    }
+    if (widthMaybe) this.fitRow();
     for (const id of SKILL_ORDER) {
       const s = this.slots[id];
       if (!skillUnlocked(id)) continue;
@@ -562,7 +602,7 @@ export class LunchHud {
         this.last[kt] = v;
         const cdt = this.one(`.slot[data-sk="${id}"] .cdt`);
         /* 0.1초마다 바뀌는 재사용 초는 캔버스(레이아웃 없음) */
-        if (cdt) this.cnum(cdt).set(v, ver);
+        if (cdt) this.pendB.set(this.cnum(cdt), [v, ver]);
       }
       void s;
     }
@@ -639,6 +679,34 @@ export class LunchHud {
   }
 }
 
+/*
+ * HUD 알약 크기가 바뀌면(숫자 자릿수·글자 길이 — 후반엔 초당 몇 번) ResizeObserver 로 안다. 그 콜백은 브라우저가 레이아웃을 막 끝낸 때라
+ * 거기서 재면 강제 레이아웃이 없다 — 예전에는 폭이 바뀔 때마다 HUD 배치 버전을 올려 다음 프레임 안에서 getBoundingClientRect 로 다시 쟀음(프레임 안 강제 레이아웃).
+ * 코인 도착 자리(앵커)는 여기서 새로 재고, 영업 지도 쪽(숫자가 비킬 HUD 자리)은 onHudResize 로 받아 같이 잰다
+ */
+const hudResizeFns = new Set<() => void>();
+let hudRO: ResizeObserver | null = null;
+function hudObserver(): ResizeObserver | null {
+  if (hudRO || typeof ResizeObserver === 'undefined') return hudRO;
+  hudRO = new ResizeObserver(() => {
+    const now = performance.now();
+    for (const id of Array.from(anchorCache.keys())) measureAnchor(id as HudId, now);
+    for (const fn of hudResizeFns) {
+      try {
+        fn();
+      } catch {
+        /* 무시 */
+      }
+    }
+  });
+  return hudRO;
+}
+/** HUD 알약 크기가 바뀐 직후(레이아웃이 끝난 때) 부를 함수. 반환 = 떼기 */
+export function onHudResize(fn: () => void): () => void {
+  hudResizeFns.add(fn);
+  return () => hudResizeFns.delete(fn);
+}
+
 /**
  * 보이는 HUD 요소 중 id 를 가진 것의 fxTop 좌표. 코인마다 querySelectorAll·getBoundingClientRect 하지 않게
  * HUD 배치 버전이 같으면 3초 동안 캐시(설계서 7장 3).
@@ -649,6 +717,9 @@ function anchorEntry(id: HudId): { v: number; at: number; p: { x: number; y: num
   const hit = anchorCache.get(id);
   /* 배치 버전이 같으면 3초까지 그대로(다시 잴 때마다 offsetParent·getBoundingClientRect 가 강제 레이아웃) */
   if (hit && hit.v === hudVer && now - hit.at < 3000) return hit;
+  return measureAnchor(id, now);
+}
+function measureAnchor(id: HudId, now: number): { v: number; at: number; p: { x: number; y: number } | null; els: HTMLElement[] } {
   let p: { x: number; y: number } | null = null;
   const els: HTMLElement[] = [];
   for (const e of Array.from(document.querySelectorAll<HTMLElement>(`[data-hud="${id}"]`))) {

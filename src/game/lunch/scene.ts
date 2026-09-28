@@ -232,7 +232,8 @@ export class LunchScene {
     audio.setHurry(false);
     dropQueuedBanners();
     const ending = closeRun(this.lunch.stats);
-    saveGame();
+    /* 저장(직렬화·localStorage)은 마지막 영업 프레임과 따로 한 작업으로(설계서 7장 — 끝나는 프레임이 긴 작업이 되지 않게) */
+    setTimeout(() => saveGame(), 0);
     this.unbind();
     document.body.classList.remove('lunching');
     audio.duck(0.45, 99);

@@ -32,6 +32,8 @@ export class Camera {
   reduce = false;
   private zoomTo = { x: 0, y: 0 };
   private flashG = new Graphics();
+  /** 번쩍은 켜져 있는 동안 매 프레임 다시 그림 — 따로 묶어(render group) 화면 층 전체의 그리기 목록을 매번 새로 짜지 않게(lunch/view.ts 층 묶음과 같은 이유) */
+  private flashC = new Container({ isRenderGroup: true });
   private flashOn = false;
   readonly vignette: Sprite;
   readonly border: Sprite;
@@ -51,7 +53,8 @@ export class Camera {
     this.border = new Sprite(borderTex());
     this.border.alpha = 0;
     this.border.blendMode = 'add';
-    L.screen.addChild(this.vignette, this.border, this.flashG);
+    this.flashC.addChild(this.flashG);
+    L.screen.addChild(this.vignette, this.border, this.flashC);
   }
 
   addShake(a: number): void {
@@ -158,6 +161,7 @@ export class Camera {
     L.fxWrap.filters = null;
     L.fxWrap.filterArea = undefined;
     this.flashG.destroy();
+    this.flashC.destroy();
     this.vignette.destroy();
     this.border.destroy();
     gsap.killTweensOf(this);
