@@ -9,7 +9,7 @@
  *          contract_m·contract_l: 티어 0..20 로 살짝 높낮이
  *          coin_arrive: 액수 크기 0..20 (amountTier() 로 계산). 클수록 아르페지오가 길어짐 (1~4음)
  *                       pitch 를 1 아닌 값으로 주면 자체 연속 상승은 끄고 그 배율만 쓴다
- *          match_up: 매칭 단계 0..6 (단계마다 반음 위)
+ *          match_up: 밸런스계약 단계 0..6 (단계마다 반음 위)
  *          lunch_tick: 남은 초 (1 이면 마지막 초 1500Hz)
  */
 import { bell, brass, clamp, mtof, noise, osc, rnd, vibrato, type X } from './core';
@@ -620,6 +620,6 @@ export const SFX_USES: Partial<Record<SfxName, string>> = {
   contract_m: 'tier 0..20',
   contract_l: 'tier 0..20',
   coin_arrive: 'tier = 액수 크기 0..20',
-  match_up: 'tier = 매칭 단계 0..6',
+  match_up: 'tier = 밸런스계약 단계 0..6',
   lunch_tick: 'tier = 남은 초',
 };

@@ -235,6 +235,7 @@ export class TreeView {
 
   /** 패널 안쪽 사각형(화면 px) */
   setRect(r: { x: number; y: number; w: number; h: number }): void {
+    if (r.w <= 10 || r.h <= 10) return;
     const prev = this.rect;
     this.rect = r;
     this.bg.position.set(r.x, r.y);
@@ -247,10 +248,11 @@ export class TreeView {
     if (!memo.set || !memo.user) this.center();
     else {
       /* 사용자가 옮긴 위치는 패널 가운데 기준으로 유지 */
+      const anchor = this.ct.toLocal({ x: prev.x + prev.w / 2, y: prev.y + prev.h / 2 });
       this.applyZoom();
-      this.ct.x += r.x + r.w / 2 - (prev.x + prev.w / 2);
-      this.ct.y += r.y + r.h / 2 - (prev.y + prev.h / 2);
+      this.ct.position.set(r.x + r.w / 2 - anchor.x * this.ct.scale.x, r.y + r.h / 2 - anchor.y * this.ct.scale.y);
       this.clampPan();
+      return;
     }
   }
   private applyZoom(): void {

@@ -1,21 +1,24 @@
+import { ONBOARDING } from '../content/onboarding';
+import { bindAdminEntry } from './admin';
+import { STRATEGIES } from '../game/strategy';
 /**
- * 사무실 패널(DOM): 영업 대표 · 도감(+거래처 관리) · 아이템 · 스킬(기본 역량 + 스킬판 3×3 십자) · 설정.
+ * 사무실 패널(DOM): 직원 선택 · 도감(+거래처 관리) · 아이템 · 스킬(기본 역량 + 스킬판 3×3 십자) · 설정.
  * 성장 트리는 Pixi(TreeView) 가 그리고 여기서는 머리 막대만 얹는다.
  * 조작: 한 번 탭 = 설명 바 / 두 번 탭 = 구매(못 사면 오류음 + 흔들림).
  * 카드 테두리 = 효과 종류 색 + 칩 글자(설계서 6장). 살 수 있음은 초록 꼬리표 + 바탕색(테두리는 쓰지 않음).
  */
-import { CHARS, CHAR_BY, F, ITEMS, ITEM_BY, SKILLS, SKILL_ORDER, TARGETS, TREE, UNLOCK_NODE, VERSION_LABEL, type SkillId, type TargetDef } from '../game/data';
+import { CHARS, CHAR_BY, DISTRICT_BY, F, ITEMS, ITEM_BY, SKILLS, SKILL_ORDER, TARGETS, TREE, UNLOCK_NODE, VERSION_LABEL, type SkillId, type TargetDef } from '../game/data';
 import { audio, sfx } from '../game/deps';
 import { fmt, fmtTime, won } from '../game/format';
 import {
   baseCost, baseMaxed, baseUnlockNode, baseUnlocked, canBuyItem, canBuyMastery, canBuySk, itemCost, itemEffectValue, masteryCost, masteryOpen, masterySeen, payable,
-  power, radiusOf, repUnlocked, skCooldown, skCost, skLv, skOpen, skillUnlocked, statLevels, STAT_MAX, targetUnlocked, lunchTime, type BaseKey,
+  refreshEff, districtUnlocked, power, radiusOf, repUnlocked, skCooldown, skCost, skLv, skOpen, skillUnlocked, statLevels, STAT_MAX, targetUnlocked, type BaseKey,
 } from '../game/rules';
-import { S, exportCode, importCode } from '../game/state';
-import { assignRep, buyBase, buyItem, buyMastery, buySkill, canBuyBase, hireRep } from '../game/shop';
+import { S, exportCode, importCode, saveGame } from '../game/state';
+import { buyBase, buyItem, buyMastery, buySkill, canBuyBase, canHireRep, hireRep } from '../game/shop';
 import { domToFx } from '../game/core/stage';
 import { currentTier, fpsTarget } from '../game/core/quality';
-import { rayCut, sparkleAt, confetti } from '../game/fx/top';
+import { sparkleAt, confetti } from '../game/fx/top';
 import { $, $$, bindBuy, esc, img, nb, toast } from './dom';
 import { Sheet, costTxt } from './sheet';
 import { kchip, kcls, keyChip } from './kinds';
@@ -58,60 +61,21 @@ export class Panels {
     this.hooks.refresh();
   }
 
-  /* ── 영업 대표 ── */
+  /* ── 직원 선택 ── */
   private reps(): void {
-    this.body.innerHTML =
-      /* 지금 대표는 목록 카드의 [배정 중] 표시로만(위 큰 카드·설명 바에 같은 내용을 되풀이하지 않음) */
-      `<h3>영업 대표 ${Object.keys(S.reps).length} / ${CHARS.length}</h3><div class="cards">` +
-      CHARS.map((c) => {
-        const has = !!S.reps[c.id];
-        const can = !has && repUnlocked(c.id);
-        const on = c.id === S.rep;
-        const cls = has ? (on ? 'on' : '') : can ? 'ok' : 'lock';
-        const node = UNLOCK_NODE[c.id];
-        const st = has ? (on ? `${img('ic.check')} 배정 중` : '탭해서 배정') : can ? `${img('ic.doubleTap')} 두 번 누르면 영입` : `${img('ic.lock')} 성장 트리: ${node ? node.name : ''}`;
-        const chips = `<div class="kcs">${c.chips.map(([k, t]) => kchip(k, t)).join('')}</div>`;
-        return `<div class="cd ${cls} ${kcls(c.kind)}" data-c="${c.id}">${chips}${can ? '<span class="okTag">영입</span>' : ''}<div class="art"><div class="portrait" style="width:84px;height:84px">${img(`c.${c.id}@idle`, '')}</div></div><div class="nm">${c.name}</div><div class="ds">${nb(c.sk)}</div><div class="cost">${st}</div></div>`;
-      }).join('') +
-      '</div>';
-    for (const e of $$(this.body, '.cd[data-c]')) {
-      const c = CHAR_BY[e.dataset.c!];
-      const info = () => {
-        const has = !!S.reps[c.id];
-        const node = UNLOCK_NODE[c.id];
-        const extra = has
-          ? c.id === S.rep
-            ? ''
-            : `<button class="btn green tw" data-a="assign">이 대표로!</button>`
-          : repUnlocked(c.id)
-            ? `<span class="pz ok">무료 영입<small class="hl">${img('ic.doubleTap')} 두 번 누르면 영입!</small></span>`
-            : `<span class="pz gray"><span class="grp">${img('ic.lock')}<small class="hl">성장 트리: ${node ? node.name : ''}</small></span></span>`;
-        this.sheet.show(`c.${c.id}@idle`, c.name, `${c.sk} · ${c.tip}`, { extra, chips: c.chips.map(([k, t]) => kchip(k, t)).join('') });
-        const b = $(this.sheet.el, '[data-a="assign"]');
-        if (b)
-          b.addEventListener('click', () => {
-            assignRep(c.id);
-            sfx('rep_select');
-            toast(`${c.name} 배정!`, 'ic.check');
-            this.render();
-            this.hooks.refresh();
-            info();
-          });
-      };
-      bindBuy(
-        e,
-        () => !S.reps[c.id] && repUnlocked(c.id),
-        () => {
-          hireRep(c.id);
-          sfx('rep_hire');
-          rayCut(`c.${c.id}@cheer`, `${c.name} 영입!`, { sub: c.sk, size: 300 });
-          confetti(16, true);
-          this.render();
-          this.done($(this.body, `.cd[data-c="${c.id}"]`), true);
-          info();
-        },
-        info,
-      );
+    this.body.innerHTML = '<h3>경영 방향<small>사무실에서 무료 변경 · 이번 영업의 중점을 선택하세요</small></h3><div class="strategy-grid">' +
+      STRATEGIES.map(s=>`<button class="strategy-card ${S.strategy===s.id?'on':''}" data-strategy="${s.id}" aria-pressed="${S.strategy===s.id}">${img(s.icon)}<b>${s.name}</b></button>`).join('') +
+      `<p class="strategy-detail">${(STRATEGIES.find(s=>s.id===S.strategy)||STRATEGIES[0]).desc}</p></div><h3>인재 고용<small>고용한 인재의 버프는 모두 상시 적용됩니다</small></h3><div class="cards">` + CHARS.map(c=>{
+        const has=!!S.reps[c.id], can=repUnlocked(c.id), node=UNLOCK_NODE[c.id];
+        return `<div class="cd ${has?'on':can?'ok':'lock'} ${kcls(c.kind)}" data-c="${c.id}"><div class="art"><div class="portrait" style="width:84px;height:84px">${img(`c.${c.id}@idle`,'')}</div></div><div class="nm">${c.name}</div><div class="ds">${c.sk}</div><div class="cost">${has?'상시 버프 적용 중':can?'두 번 누르면 고용':`먼저: ${node?.name||''}`}</div></div>`;
+      }).join('')+'</div>';
+    for(const b of $$(this.body,'[data-strategy]')) b.addEventListener('click',()=>{
+      S.strategy=STRATEGIES.find(s=>s.id===b.dataset.strategy)!.id;refreshEff();saveGame();this.render();this.hooks.refresh();toast('경영 방향을 변경했어요','ic.check');
+    });
+    for(const e of $$(this.body,'[data-c]')) {
+      const c=CHAR_BY[e.dataset.c!];
+      const info=()=>this.sheet.show(`c.${c.id}@idle`,c.name,c.sk+' · 고용한 인재의 버프는 중첩됩니다',{extra:S.reps[c.id]?'<span class="pz ok">상시 적용 중</span>':repUnlocked(c.id)?'<span class="pz ok">무료 고용 · 두 번 탭</span>':'',state:!repUnlocked(c.id)?'lock':'none',lockText:UNLOCK_NODE[c.id]?.name});
+      bindBuy(e,()=>canHireRep(c.id),()=>{hireRep(c.id);saveGame();sfx('rep_hire');this.render();this.done($(this.body,`[data-c="${c.id}"]`),true);info();},info);
     }
   }
 
@@ -119,7 +83,7 @@ export class Panels {
   private dex(): void {
     const found = TARGETS.filter((t) => S.counts[t.id]).length;
     this.body.innerHTML =
-      `<h3>도감 ${found} / ${TARGETS.length}<small>10·100·1,000·1만·10만 곳마다 별</small></h3><div class="cards">` +
+      `<h3>도감 ${found} / ${TARGETS.length}<small>계약 10·100·1,000·1만·10만 건마다 별</small></h3><div class="cards">` +
       TARGETS.map((t) => this.dexCard(t)).join('') +
       '</div>';
     for (const e of $$(this.body, '.cd[data-t]')) {
@@ -155,7 +119,7 @@ export class Panels {
     const nm = seen ? t.name : un ? '???' : t.name;
     const art = seen || !un ? img(`t.${t.id}@idle`, '', !seen ? 'style="filter:brightness(0) opacity(.25)"' : '') : img(`t.${t.id}@idle`, '', 'style="filter:brightness(0) opacity(.25)"');
     /* 도감 카드 = 이 거래처에서 번 누적 매출(거래액이 아니라) */
-    const ds = !un ? `성장 트리: ${node ? node.name : ''}` : seen ? `${t.sizeLabel} · ${fmt(n)}곳<br>매출 ${won(S.revBy[t.id] || 0)}` : '';
+    const ds = !un ? `성장 트리: ${node ? node.name : ''}` : seen ? `${t.sizeLabel} · 계약 ${fmt(n)}건<br>누적 매출 ${won(S.revBy[t.id] || 0)}` : '';
     const vc = keyChip('mastery');
     const mast = !un ? '' : !seen ? `<div class="cost">${img('ic.lock')}</div>` : !open ? `<div class="cost">${img('ic.lock')} Lv.${t.masteryLv} 관리 열림</div>` : max ? `<div class="cost">${vc}<span style="color:var(--purple)">관리 MAX</span></div>` : `<div class="bar"><i style="width:${st * 10}%"></i></div><div class="cost">${vc}관리 ${st}/10 · ${costTxt(masteryCost(t))}</div>`;
     return `<div class="cd ${cls}" data-t="${t.id}"><span class="badge l ${side}">${sideLab}</span>${can ? `<span class="okTag">올리기</span>` : ''}<div class="art">${art}</div><div class="nm">${nm}</div><div class="stars">${[0, 1, 2, 3, 4].map((i) => img(i < stars ? 'ic.star' : 'ic.starEmpty')).join('')}</div><div class="ds">${ds}</div>${mast}</div>`;
@@ -170,7 +134,7 @@ export class Panels {
       return;
     }
     const title = `${t.name} 관리 ${st}/10`;
-    const desc = `계약 가치 +${st * 5}% → +${(st + 1) * 5}% · ${beh}`;
+    const desc = `이 거래처의 거래액·매출·기술력 보상이 커집니다.<br>현재 +${st * 5}%${st < F.MASTERY.max ? ` → 다음 +${(st + 1) * 5}%` : ' (최대)'} · ${beh}`;
     const chips = keyChip('mastery');
     if (!masterySeen(t)) this.sheet.show(`t.${t.id}@idle`, '???', '영업 중에 만나면 열려요', { state: 'lock', lockText: '먼저: 만나기' });
     else if (!masteryOpen(t)) this.sheet.show(`t.${t.id}@idle`, title, desc, { state: 'lock', lockText: `레벨 ${t.masteryLv}부터`, chips });
@@ -182,7 +146,7 @@ export class Panels {
   private items(): void {
     const n = Object.keys(S.items).length;
     this.body.innerHTML =
-      `<h3>영업 아이템 ${n} / ${ITEMS.length}<small>계약하면 가끔 떨어져요 · 중복은 기술력</small></h3><div class="cards">` +
+      `<h3>지역 유물 ${n} / ${ITEMS.length}<small>해당 지역에서만 발견 · 보유 효과는 전 지역 적용 · 중복은 기술력</small></h3><div class="cards">` +
       ITEMS.map((it) => {
         const lv = S.items[it.id] || 0;
         const can = canBuyItem(it.id);
@@ -190,7 +154,7 @@ export class Panels {
         const art = lv ? img(`i.${it.id}`, '') : img(`i.${it.id}`, '', 'style="filter:brightness(0) opacity(.2)"');
         /* 얻은 아이템만 효과 색·칩(??? 는 그림자만 — 무엇인지 미리 알려 주지 않음) */
         const kind = lv ? ` ${kcls(it.kind)}` : '';
-        return `<div class="cd ${cls}${kind}" data-i="${it.id}">${lv ? `<div class="kcs">${kchip(it.kind, it.chip)}</div>` : ''}${can ? `<span class="okTag">강화</span>` : ''}<div class="art">${art}</div><div class="nm">${lv ? `${it.name} <small class="lvs">Lv ${lv}/10</small>` : '???'}</div><div class="ds">${lv ? `${it.u.replace(/[0-9.]+/, (m) => String(Math.round(parseFloat(m) * lv * 100) / 100))}` : ''}</div><div class="cost">${!lv ? '' : lv >= F.ITEM.max ? '<span style="color:var(--purple)">MAX</span>' : costTxt(itemCost(it.id))}</div></div>`;
+        return `<div class="cd ${cls}${kind}" data-i="${it.id}">${lv ? `<div class="kcs">${kchip(it.kind, it.chip)}</div>` : ''}${can ? `<span class="okTag">강화</span>` : ''}<div class="art">${art}</div><div class="nm">${lv ? `${it.name} <small class="lvs">Lv ${lv}/10</small>` : '???'}</div><div class="ds">${lv ? `${it.u.replace(/[0-9.]+/, (m) => String(Math.round(parseFloat(m) * (itemEffectValue(it.id, lv) / it.v) * 100) / 100))}` : ''}</div><div class="cost">${DISTRICT_BY[it.district].name} 전용 유물 · ${districtUnlocked(it.district)?'지역 해금':'지역 잠김'}<br>${!lv ? '' : lv >= F.ITEM.max ? '<span style="color:var(--purple)">MAX</span>' : costTxt(itemCost(it.id))}</div></div>`;
       }).join('') +
       '</div>';
     for (const e of $$(this.body, '.cd[data-i]')) {
@@ -199,7 +163,7 @@ export class Panels {
       const info = () => {
         const lv = S.items[id] || 0;
         if (!lv) {
-          this.sheet.show(`i.${id}`, '???', '계약하면 가끔 떨어져요', { state: 'lock', lockText: '미획득' });
+          this.sheet.show(`i.${id}`, it.name, `${DISTRICT_BY[it.district].name}에서 계약하면 발견할 수 있어요. 필요 거래처 해금 수: ${Math.max(F.ITEM.gradeMin,it.grade)}.`, { state: 'lock', lockText: districtUnlocked(it.district) ? '해당 지역에서 발견 가능' : '지역 해금 필요' });
           return;
         }
         const now = itemEffectValue(id, lv);
@@ -241,18 +205,18 @@ export class Panels {
     const cR = keyChip('radius');
     this.body.innerHTML =
       `<h3>기본 역량<small>매출로 강화</small></h3><div class="basics">
-        <div class="cd ${!bpUn ? 'lock' : bpOk ? 'ok' : ''} ${kcls('power')}" data-b="power">${bpOk ? '<span class="okTag">올리기</span>' : ''}<div class="art">${img('ic.basic_power', '')}</div><div><div class="nm">${cP}설득력 Lv ${S.base.power}</div><div class="ds">${nb(bpUn ? `초당 설득 ${fmt(P)} · 레벨당 ×${F.BASIC.power.mult}` : `초당 설득 ${fmt(P)}`)}</div>${bpUn ? `<div class="cost">${costTxt({ rev: bp, tech: 0 })}</div>` : lockLine('power')}</div></div>
-        <div class="cd ${!brUn ? 'lock' : brMax ? 'max' : brOk ? 'ok' : ''} ${kcls('radius')}" data-b="radius">${brOk ? '<span class="okTag">올리기</span>' : ''}<div class="art">${img('ic.basic_radius', '')}</div><div><div class="nm">${cR}영업 반경 Lv ${S.base.radius}</div><div class="ds">${nb(brUn ? `반지름 ${Math.round(R)} · 레벨당 ×${F.BASIC.radius.mult} (최대 ${F.BASIC.radius.max})` : `반지름 ${Math.round(R)}`)}</div>${!brUn ? lockLine('radius') : `<div class="cost">${brMax ? 'MAX' : costTxt({ rev: br, tech: 0 })}</div>`}</div></div>
+        <div class="cd ${!bpUn ? 'lock' : bpOk ? 'ok' : ''} ${kcls('power')}" data-b="power">${bpOk ? '<span class="okTag">올리기</span>' : ''}<div class="art">${img('ic.basic_power', '')}</div><div><div class="nm">${cP}영업기술 Lv ${S.base.power}</div><div class="ds">${nb(bpUn ? `초당 설득 ${fmt(P)} · 레벨당 ×${F.BASIC.power.mult}` : `초당 설득 ${fmt(P)}`)}</div>${bpUn ? `<div class="cost">${costTxt({ rev: bp, tech: 0 })}</div>` : lockLine('power')}</div></div>
+        <div class="cd ${!brUn ? 'lock' : brMax ? 'max' : brOk ? 'ok' : ''} ${kcls('radius')}" data-b="radius">${brOk ? '<span class="okTag">올리기</span>' : ''}<div class="art">${img('ic.basic_radius', '')}</div><div><div class="nm">${cR}제품기술 Lv ${S.base.radius}</div><div class="ds">${nb(brUn ? `반지름 ${Math.round(R)} · 레벨당 ×${F.BASIC.radius.mult} (최대 ${F.BASIC.radius.max})` : `반지름 ${Math.round(R)}`)}</div>${!brUn ? lockLine('radius') : `<div class="cost">${brMax ? 'MAX' : costTxt({ rev: br, tech: 0 })}</div>`}</div></div>
       </div>
       <h3>영업 스킬 4종<small>자동 발동</small></h3><div class="powers">` +
       SKILL_ORDER.map((id) => this.skillPanel(id)).join('') +
       '</div>';
     const infoBase = (k: BaseKey) => {
       const chips = k === 'power' ? cP : cR;
-      if (!baseUnlocked(k)) this.sheet.show(k === 'power' ? 'ic.basic_power' : 'ic.basic_radius', k === 'power' ? `설득력 Lv ${S.base.power}` : `영업 반경 Lv ${S.base.radius}`, k === 'power' ? `초당 ${fmt(power())}` : `반지름 ${Math.round(radiusOf(U_LAND))}`, { state: 'lock', lockText: `먼저: ${baseUnlockNode(k).name}`, chips });
-      else if (k === 'power') this.sheet.show('ic.basic_power', `설득력 Lv ${S.base.power} → ${S.base.power + 1}`, `초당 ${fmt(power())} → ${fmt(power() * F.BASIC.power.mult)}`, { cost: { rev: baseCost('power'), tech: 0 }, chips });
-      else if (baseMaxed('radius')) this.sheet.show('ic.basic_radius', `영업 반경 Lv ${S.base.radius}`, `반지름 ${Math.round(radiusOf(U_LAND))}`, { state: 'max', chips });
-      else this.sheet.show('ic.basic_radius', `영업 반경 Lv ${S.base.radius} → ${S.base.radius + 1}`, `반지름 ${Math.round(radiusOf(U_LAND))} → ${Math.round(radiusOf(U_LAND) * F.BASIC.radius.mult)}`, { cost: { rev: baseCost('radius'), tech: 0 }, chips });
+      if (!baseUnlocked(k)) this.sheet.show(k === 'power' ? 'ic.basic_power' : 'ic.basic_radius', k === 'power' ? `영업기술 Lv ${S.base.power}` : `제품기술 Lv ${S.base.radius}`, k === 'power' ? `초당 ${fmt(power())}` : `반지름 ${Math.round(radiusOf(U_LAND))}`, { state: 'lock', lockText: `먼저: ${baseUnlockNode(k).name}`, chips });
+      else if (k === 'power') this.sheet.show('ic.basic_power', `영업기술 Lv ${S.base.power} → ${S.base.power + 1}`, `초당 ${fmt(power())} → ${fmt(power() * F.BASIC.power.mult)}`, { cost: { rev: baseCost('power'), tech: 0 }, chips });
+      else if (baseMaxed('radius')) this.sheet.show('ic.basic_radius', `제품기술 Lv ${S.base.radius}`, `반지름 ${Math.round(radiusOf(U_LAND))}`, { state: 'max', chips });
+      else this.sheet.show('ic.basic_radius', `제품기술 Lv ${S.base.radius} → ${S.base.radius + 1}`, `반지름 ${Math.round(radiusOf(U_LAND))} → ${Math.round(radiusOf(U_LAND) * F.BASIC.radius.mult)}`, { cost: { rev: baseCost('radius'), tech: 0 }, chips });
     };
     for (const k of ['power', 'radius'] as const) {
       const e = $(this.body, `.cd[data-b="${k}"]`);
@@ -355,7 +319,7 @@ export class Panels {
       ['계약', `고객사 ${fmt(S.netC)}곳 · 제휴점 ${fmt(S.netR)}곳`],
       ['성장 트리', `${treeN} / ${TREE_COUNT}칸`],
       ['스킬 단계 합', `${skSum}`],
-      ['영업 가지 · 기술 가지', `${st.sales}/${STAT_MAX.sales} · ${st.tech}/${STAT_MAX.tech}`],
+      ['영업력 · 기술력', `${st.sales}/${STAT_MAX.sales} · ${st.tech}/${STAT_MAX.tech}`],
       ['플레이 시간', fmtTime(S.play)],
     ];
     const v = (k: 'master' | 'music' | 'sfx') => Math.round(audio.getVolume(k) * 100);
@@ -381,15 +345,11 @@ export class Panels {
         <div class="ln"><button class="btn light tw" data-a="export">${img('ic.save')}내보내기</button><button class="btn light tw" data-a="import">${img('ic.load')}가져오기</button><button class="btn red tw" data-a="reset" style="margin-left:auto">${img('ic.reset')}초기화</button></div>
         <textarea class="code" data-v="code" placeholder="저장 코드 붙여넣기"></textarea>
       </div>
-      <h3>${img('ic.help')} 어떻게 하나요?</h3><div class="howto">
-        <div class="step"><div class="no">1</div><p><b>영업 나가기</b> → ${Math.round(lunchTime())}초 동안 <b>영업 반경</b>을 기업·식당 위에 올려 두세요.</p></div>
-        <div class="step"><div class="no">2</div><p><b>설득 게이지</b>가 0이 되면 <b>영업 성공!</b> 오래 두면 사라져요.</p></div>
-        <div class="step"><div class="no">3</div><p><b>식대 거래액</b>은 고객사·제휴점이 둘 다 있어야 생겨요. 고르게 계약하면 <b>매칭</b>이 올라가요.</p></div>
-        <div class="step"><div class="no">4</div><p><b>매출</b> = 수수료(거래액 10%) + 이용료(기업 규모 5%).</p></div>
-        <div class="step"><div class="no">5</div><p><b>매출</b>: 영업 가지·기본 역량·관리<br><b>기술력</b>: 기술 가지·스킬·아이템</p></div>
-        <div class="step"><div class="no">6</div><p>트리 끝 <b>전국 식대 플랫폼</b>을 열면 대장그룹 트윈타워가 나타나요.</p></div>
-      </div>
-      <p style="text-align:center;font-size:12px;color:#a08a6a;margin-top:12px">식권대장 타이쿤 v${VERSION_LABEL}</p>`;
+      <h3>${img('ic.help')} ${ONBOARDING.title}</h3><p class="guide-intro">${ONBOARDING.intro}</p><div class="howto">
+        ${ONBOARDING.steps.map(([title,body],i)=>`<div class="step"><div class="no">${i+1}</div><p><b>${title}</b><br>${body}</p></div>`).join('')}
+      </div><h3>능력치 이해하기</h3><div class="guide-glossary">${ONBOARDING.glossary.map(([title,body])=>`<details><summary>${title}</summary><p>${body}</p></details>`).join('')}</div><p class="guide-note">${ONBOARDING.economy}</p>
+      <p data-admin-entry tabindex="0" style="text-align:center;font-size:12px;color:#a08a6a;margin-top:12px">식권대장 타이쿤 v${VERSION_LABEL}</p>`;
+    bindAdminEntry(this.body, () => { this.render(); this.hooks.refresh(); });
     for (const r of $$<HTMLInputElement>(this.body, 'input[data-vol]')) {
       r.addEventListener('input', () => {
         const k = r.dataset.vol as 'master' | 'music' | 'sfx';
@@ -476,4 +436,3 @@ export class Panels {
     });
   }
 }
-

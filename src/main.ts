@@ -499,6 +499,7 @@ function onLunchEnd(st: RunStats, ending: boolean): void {
 }
 
 function onKey(e: KeyboardEvent): void {
+  if (document.querySelector('#test-admin[open]')) return;
   const tag = (e.target as HTMLElement)?.tagName || '';
   if (/INPUT|TEXTAREA/.test(tag)) return;
   if (e.code === 'BracketRight') {
@@ -552,7 +553,7 @@ function onKey(e: KeyboardEvent): void {
 function installDebug(): void {
   const game = {
     speed: (n: number) => setSpeed(n),
-    /** 검수용: 매출 amount · 기술력 tech · 경험치 xp 주기 */
+    /** 검수용: 매출 amount · 기술력 tech · 사용자수 xp 주기 */
     give: (amount: number, tech = 0, xp = 0) => {
       S.revenue += amount;
       S.tech += tech;
@@ -587,7 +588,7 @@ function installDebug(): void {
     canBuy: (id: string) => (TREE_BY[id] ? canBuyNode(TREE_BY[id]) : false),
     /** 칸 다음 레벨 비용 · 재화('rev' | 'tech') */
     nodeCost: (id: string) => (TREE_BY[id] ? { cost: nodeCost(TREE_BY[id]), cur: nodeCurrency(TREE_BY[id]) } : null),
-    /** 기본 역량(설득력 power · 반경 radius) */
+    /** 기본 역량(영업기술 power · 반경 radius) */
     baseCost: (k: 'power' | 'radius') => baseCost(k),
     canBuyBase: (k: 'power' | 'radius') => canBuyBase(k),
     buyBase: (k: 'power' | 'radius') => {

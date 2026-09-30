@@ -267,7 +267,7 @@ textarea.code { width:100%; height:64px; font-size:11px; border:2px solid var(--
 .res > div b { font-size:21px; color:var(--ink); font-weight:normal; }
 .res .ic { width:22px; height:22px; }
 .res.c3 { grid-template-columns:1fr 1fr 1fr; }
-/* 정산(설계서 1장): 매출 합계(가장 큼) → 수수료·이용료 → 기술력(둘째) → 계약·매칭 → 식대 거래액(작은 줄) */
+/* 정산(설계서 1장): 매출 합계(가장 큼) → 수수료·이용료 → 기술력(둘째) → 계약·밸런스계약 → 식대 거래액(작은 줄) */
 .bigline { background:linear-gradient(180deg,#fff7d9,#ffe29a); border-radius:14px; padding:8px; border:3px solid #fff; box-shadow:0 3px 0 var(--gold-dark); }
 .bigline .lab { font-size:15px; color:var(--brown-dark); display:flex; align-items:center; justify-content:center; gap:6px; }
 .bigline .lab .ic { width:30px; height:30px; }
@@ -484,10 +484,10 @@ body.touching .mb .tip { display:none; }
 .panel.tree .tcenter { top:8px; background:rgba(10,18,50,.92); }
 #ui.port .panel.tree .treehead { padding-bottom:46px; }
 #ui.port .panel.tree .tcenter { top:44px; }
-/* 폰 가로 영업: 매칭·결제 대기 알약을 첫 줄로 올려 지도 맨 윗줄 부지를 덮지 않게(hud.ts place) */
+/* 폰 가로 영업: 밸런스계약·결제 대기 알약을 첫 줄로 올려 지도 맨 윗줄 부지를 덮지 않게(hud.ts place) */
 #ui.short.land .lhud .r1 { gap:6px; }
 #ui.short.land .lhud .r1 .pend { flex:none; }
-/* 첫 줄이 모자라면(결제 대기 알약까지 뜰 때) 매칭 게이지 막대를 빼고 경험치 막대를 줄임 — hud.ts 가 .tight 를 붙임 */
+/* 첫 줄이 모자라면(결제 대기 알약까지 뜰 때) 밸런스계약 게이지 막대를 빼고 사용자수 막대를 줄임 — hud.ts 가 .tight 를 붙임 */
 #ui.short.land .lhud .r1 .match { flex:none; white-space:nowrap; }
 #ui.short.land .lhud .r1 .match .need { top:auto; bottom:-20px; }
 #ui.short.land .lhud .r1 .match .mm { min-width:0; }
@@ -531,7 +531,13 @@ body.touching .mb .tip { display:none; }
 #ui.port .panel.tree .treehead { padding-right:10px; }
 .cd .nm .lvs { font-size:11px; color:var(--sky-dark); white-space:nowrap; }
 .dealcard .t small { font-size:11px; color:#a08a6a; }
-${kindCss()}
+/* Stable mobile recenter control, independent of transform animations. */
+#ui .tcenter { color:#edf5ff; translate:-50% 0; transform:none; touch-action:manipulation; min-height:30px; white-space:nowrap; }
+#ui.port .panel.tree .tcenter { left:10px; translate:none; top:44px; }
+.strategy-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:22px}.strategy-card{padding:14px;background:#fff8ec;border:2px solid #dbc9a7;border-radius:14px;display:grid;gap:6px;text-align:left;cursor:pointer}.strategy-card.on{border-color:#36967c;background:#ddf2e7}.strategy-card span{font-size:12px;line-height:1.4}.strategy-card .ic{width:26px;height:26px}
+.strategy-grid{grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}.strategy-card{padding:10px 5px;text-align:center;justify-items:center;font-size:12px;word-break:keep-all}.strategy-detail{grid-column:1/-1;background:#e7f2e9;border-radius:10px;padding:12px;margin:4px 0;color:#245a45;word-break:keep-all;font-size:14px}.strategy-card .ic{width:24px;height:24px}
+.guide-intro,.guide-note{font-size:14px;line-height:1.65;word-break:keep-all}.guide-note{color:var(--brown);padding:12px;background:#fff0d8;border-radius:12px}.guide-glossary details{margin:7px 0;padding:12px;background:#fffaf0;border-radius:10px;font-size:14px}.guide-glossary summary{cursor:pointer;font-weight:bold}.guide-glossary p{line-height:1.6;word-break:keep-all;margin:8px 0 0}.howto p{line-height:1.6;word-break:keep-all}
+${kindCss()}  
 `;
 
 export function injectStyle(): void {

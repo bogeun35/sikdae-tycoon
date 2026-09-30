@@ -1,3 +1,4 @@
+import { corpShare, STORES_PER_CONTRACT } from '../network';
 /**
  * 영업 한 판의 로직(고정 스텝). 그림과 분리 — 사건은 LunchEvents 로 알린다.
  * 규칙·수치는 설계서 3장·밸런스 시뮬(sim.js)과 같다.
@@ -76,7 +77,7 @@ export interface LunchEvents {
   inquiryPick(b: Inquiry, r: Reward): void;
   itemDrop(it: FloatItem): void;
   itemPick(it: FloatItem, isNew: boolean): void;
-  /** 계약 밖 기술력(매부장 10곳마다 = per10) */
+  /** 계약 밖 기술력(재무대장(CFO) 10곳마다 = per10) */
   tech(x: number, y: number, n: number, per10: boolean): void;
   levelUp(lv: number, gained: number): void;
   pendingRelease(gmv: number, comm: number): void;
@@ -221,15 +222,15 @@ export class Lunch {
     const pool = this.pool;
     const rare = 1 + E.rare + (this.mod.rare || 0);
     let lack: 'corp' | 'store' | null = null;
-    if (E.autoMatch) lack = this.cN > this.rN ? 'store' : this.rN > this.cN ? 'corp' : null;
+    if (E.autoMatch) lack = this.cN > this.rN / 10 ? 'store' : this.rN / 10 > this.cN ? 'corp' : null;
     /* 첫 결제 연결 전(한쪽만 계약해 결제 대기 중): 반대쪽이 더 자주 나옴 — 거래액 0원 판이 이어지지 않게 */
     const first: 'corp' | 'store' | null = S.netC > 0 && S.netR === 0 ? 'store' : S.netR > 0 && S.netC === 0 ? 'corp' : null;
     const firstBias = MATCH.FIRST_BIAS || 0;
     /* 보스는 '영업 시작!' 알약(0.95초)이 사라진 뒤에 등장(첫 호출에 섞여 나오면 등장 연출이 시작 알약과 겹침) */
     const bossOut = this.stats.bossSigned || this.ents.some((e) => e.boss) || this.t < BOSS_AFTER;
-    const ws = pool.map((f, k) => {
+    const ws = pool.map((f) => {
       if (f.beh === 'boss' && bossOut) return 0;
-      let w = f.w * (k >= pool.length - 2 ? rare : 1) * (f.beh === 'group' ? 0.5 : 1);
+      let w = f.w * Math.pow(rare, Math.max(0, f.tier - 1) / 9) * (f.beh === 'group' ? 0.5 : 1);
       if (f.side === 'store') w *= this.mod.storeBias || 1;
       if (f.side === 'corp') w *= this.mod.corpBias || 1;
       if (f.big) w *= this.mod.bigBias || 1;
@@ -238,6 +239,11 @@ export class Lunch {
       if (first && f.side === first) w *= 1 + firstBias;
       return w;
     });
+    // Normalize side totals: high-tier corporate entries cannot crowd out stores.
+    const totals = {corp:0, store:0};
+    pool.forEach((f,i)=>totals[f.side]+=ws[i]);
+    const p = corpShare(S.netC, S.netR, this.mod.corpBias || 1, this.mod.storeBias || 1, E.autoMatch);
+    pool.forEach((f,i)=>{if(totals[f.side]>0)ws[i]=ws[i]/totals[f.side]*(f.side==='corp'?p:1-p);});
     let tt = ws.reduce((a, b) => a + b, 0) * rand();
     for (let k = 0; k < pool.length; k++) {
       tt -= ws[k];
@@ -683,7 +689,7 @@ export class Lunch {
 
   private matchMult(): number {
     const c = this.cN;
-    const r = this.rN;
+    const r = this.rN / 10;
     const mx = Math.max(c, r);
     if (!mx) return 1;
     const pairs = Math.min(c, r);
@@ -702,7 +708,7 @@ export class Lunch {
   techMult(): number {
     return 1 + E.tech + (this.mod.tech || 0);
   }
-  /** 계약당 평균 기술력(매칭 전, 지금 풀 기준) — 선물 상자·문의·중복 아이템·매부장 보상 기준 */
+  /** 계약당 평균 기술력(밸런스계약 전, 지금 풀 기준) — 선물 상자·문의·중복 아이템·재무대장(CFO) 보상 기준 */
   avgTech(): number {
     const pool = this.pool;
     return (
@@ -716,7 +722,7 @@ export class Lunch {
     const st = this.stats;
     const crit = rand() < RUN.CRIT_BASE + E.crit;
     if (f.side === 'corp') this.cN += fs.boss ? MATCH.BOSS_WEIGHT : 1;
-    else this.rN++;
+    else this.rN += STORES_PER_CONTRACT;
     const M = this.matchMult();
     this.M = M;
     st.bestM = Math.max(st.bestM, M);
@@ -734,8 +740,8 @@ export class Lunch {
       S.netC++;
       st.corps++;
     } else {
-      S.netR++;
-      st.stores++;
+      S.netR += STORES_PER_CONTRACT;
+      st.stores += STORES_PER_CONTRACT;
     }
     let pending = false;
     let released: { gmv: number; comm: number } | null = null;
@@ -782,14 +788,14 @@ export class Lunch {
     S.revBy[f.id] = (S.revBy[f.id] || 0) + own;
     if (!st.best || own > st.best.rev) st.best = { t: f, gmv, rev: own };
     if (!S.best || own > (S.best.rev || 0)) S.best = { id: f.id, gmv, rev: own };
-    /* 경험치 */
+    /* 사용자수 */
     const xp = (f.xp + E.xflat) * (1 + E.xp + (this.mod.xp || 0));
     const grade = Math.min(fs.boss ? 4 : 3, f.grade + (crit ? 1 : 0));
     const res: ContractResult = { gmv, comm, fee, rev, xp, tech, crit, M, G0, pending, grade, released, fromSkill: src };
     this.ev.remove(fs, 'signed');
     this.ev.contract(fs, res);
     if (released) this.ev.pendingRelease(released.gmv, released.comm);
-    /* 매부장: 10곳마다 계약당 평균 기술력 × 2 */
+    /* 재무대장(CFO): 10곳마다 계약당 평균 기술력 × 2 */
     if (E.per10 && st.count % 10 === 0) {
       const p = won1(this.avgTech() * TECH.per10K * E.per10);
       this.addTech(p);
@@ -798,7 +804,7 @@ export class Lunch {
     st.xp += xp;
     const up = addXp(xp);
     if (up) this.ev.levelUp(S.lv, up);
-    /* 매칭 단계 */
+    /* 밸런스계약 단계 */
     const stepsM: number[] = [1.25, 1.5, 1.75, 2, 2.5, 3];
     while (this.matchStep < stepsM.length && M >= stepsM[this.matchStep]) {
       this.matchStep++;
@@ -806,7 +812,7 @@ export class Lunch {
     }
     if (E.respawn && rand() * 100 < E.respawn && this.ents.length < this.maxTargets()) this.spawnFish();
     if (E.wom && rand() * 100 < F.PASSIVE.wom.base + E.womC) this.womAt(fs.x, fs.y);
-    if (rand() < RUN.ITEM_CHANCE * (1 + E.itemFind) * (f.tier >= RUN.ITEM_HIGH_TIER ? 2 : 1)) {
+    if (itemPool().length && rand() < RUN.ITEM_CHANCE * (1 + E.itemFind) * (f.tier >= RUN.ITEM_HIGH_TIER ? 2 : 1)) {
       /* 떨어지는 아이템 = 등급 풀(해금한 대상 수 ≥ 등급) 안에서 */
       const it: FloatItem = { id: ++this.uid, item: pickOne(itemPool()).id, x: fs.x, y: fs.y - fs.w * 0.4, t: 0 };
       this.items.push(it);
@@ -850,7 +856,8 @@ export class Lunch {
     } else {
       const pool = itemPool();
       const p2 = pool.filter((x) => !S.items[x.id]);
-      out.item = (p2.length ? pickOne(p2) : pickOne(pool)).id;
+      if (pool.length) out.item = (p2.length ? pickOne(p2) : pickOne(pool)).id;
+      else out.tech = this.dupTech();
     }
     this.applyReward(out, 'chest');
     return out;
@@ -863,7 +870,7 @@ export class Lunch {
     out.xp = (this.pool.reduce((a, f) => a + f.xp + E.xflat, 0) / this.pool.length) * Q.xpK * tier * (1 + E.xp);
     if (r < Q.split[0]) out.rev = won1(Math.max(Q.revMin, this.avgRev() * Q.revK) * tier * rnd(Q.revJitter[0], Q.revJitter[1]));
     else if (r < Q.split[1]) out.tech = won1(Math.max(TECH.inqMin, this.avgTech() * TECH.inqK) * tier * rnd(Q.revJitter[0], Q.revJitter[1]));
-    else out.item = pickOne(itemPool()).id;
+    else { const items = itemPool(); if (items.length) out.item = pickOne(items).id; else out.tech = this.dupTech(); }
     this.applyReward(out, 'inq');
     return out;
   }
@@ -888,8 +895,8 @@ export class Lunch {
 
   /** 레벨 화면 표시용 */
   lacking(): 'corp' | 'store' | null {
-    if (Math.abs(this.cN - this.rN) < 3) return null;
-    return this.cN > this.rN ? 'store' : 'corp';
+    if (Math.abs(this.cN - this.rN / 10) < 3) return null;
+    return this.cN > this.rN / 10 ? 'store' : 'corp';
   }
 }
 

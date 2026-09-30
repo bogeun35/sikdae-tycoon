@@ -1,11 +1,11 @@
 /**
  * 경제·공식. 상수는 설계 데이터 formulas 를 그대로 옮긴다(요율은 게임용 가정값).
- * 효과 합(E)·설득력·반경·비용·구매 가능 여부를 여기서 계산한다. 수치 정본은 scripts/balance/econ.mjs → gdd-data.json,
+ * 효과 합(E)·영업기술·반경·비용·구매 가능 여부를 여기서 계산한다. 수치 정본은 scripts/balance/econ.mjs → gdd-data.json,
  * 밸런스 시뮬(scripts/balance)은 이 파일을 그대로 불러 쓴다.
  *
  * 재화 두 개(경제 v4):
- *   매출(S.revenue)  = 영업 가지(서쪽)·공통 칸 · 기본 역량 · 거래처 관리
- *   기술력(S.tech)   = 기술 가지(동쪽) · 영업 스킬 · 아이템 강화
+ *   매출(S.revenue)  = 영업력(서쪽)·공통 칸 · 기본 역량 · 거래처 관리
+ *   기술력(S.tech)   = 기술력(동쪽) · 영업 스킬 · 아이템 강화
  * 잠김: 트리 칸 req/reqAny · 기본 역량(unlock 칸) · 거래처 관리(한 번 이상 만남) · 아이템(등급 풀) — 조건 전에는 강화 불가.
  */
 import {
@@ -13,6 +13,7 @@ import {
   type ItemDef, type SkillId, type TargetDef, type TreeNode,
 } from './data';
 import { S } from './state';
+import { STRATEGIES } from './strategy';
 
 /* ── 상수 (formulas) ───────────────────────────── */
 export const ECON = F.ECON;
@@ -85,9 +86,13 @@ export function refreshEff(): Eff {
       (e as Record<string, number>)[ef] = (e[ef] as number) + v;
     }
   }
-  const cp = CHAR_BY[S.rep] || CHAR_BY.bear;
-  const relicPow = 1 + (cp.eff.itemPow || 0);
-  for (const k in cp.eff) if (typeof e[k] === 'number') (e as Record<string, number>)[k] = (e[k] as number) + cp.eff[k];
+  for (const id of Object.keys(S.reps)) {
+    const cp = CHAR_BY[id]; if (!S.reps[id] || !cp) continue;
+    for (const k in cp.eff) if (typeof e[k] === 'number') (e as Record<string, number>)[k] += cp.eff[k];
+  }
+  const strategy = STRATEGIES.find(s=>s.id===S.strategy) || STRATEGIES[0];
+  for (const [k,v] of Object.entries(strategy.eff)) (e as Record<string, number>)[k] += v;
+  const relicPow = 1 + e.itemPow;
   let all = 0;
   for (const id in S.items) {
     const it = ITEM_BY[id];
@@ -102,8 +107,8 @@ export function refreshEff(): Eff {
   return e;
 }
 
-/* ── 설득력·반경·시간 ─────────────────────────── */
-/** 설득력 P(초당) = 10 × (1 + pflat) × 1.08^기본설득력 × 1.02^(레벨−1) × (1 + power + all) */
+/* ── 영업기술·반경·시간 ─────────────────────────── */
+/** 영업기술 P(초당) = 10 × (1 + pflat) × 1.08^기본영업기술 × 1.02^(레벨−1) × (1 + power + all) */
 export function power(): number {
   return RUN.POWER_BASE * (1 + E.pflat) * Math.pow(F.BASIC.power.mult, S.base.power) * Math.pow(F.XP.powerPerLv, S.lv - 1) * (1 + E.power + E.all);
 }
@@ -152,7 +157,7 @@ export function lackOf(c: Cost): string {
 }
 
 /* ── 트리 ──────────────────────────────────────── */
-/** 칸을 사는 재화: 기술 가지 = 기술력, 영업 가지·공통 = 매출 */
+/** 칸을 사는 재화: 기술력 = 기술력, 영업력·공통 = 매출 */
 export function nodeCurrency(n: TreeNode): Currency {
   return n.br === 'tech' ? 'tech' : 'rev';
 }
@@ -204,7 +209,7 @@ export const STAT_MAX = { sales: F.STATS.sales.max as number, tech: F.STATS.tech
 
 /* ── 기본 역량 (매출) ─────────────────────────── */
 export type BaseKey = 'power' | 'radius';
-/** 열어 주는 트리 칸(설득력 = 영업 교육 Ⅰ, 반경 = 발품 영업 Ⅰ) */
+/** 열어 주는 트리 칸(영업기술 = 영업 교육 Ⅰ, 반경 = 발품 영업 Ⅰ) */
 export const baseUnlockNode = (k: BaseKey): TreeNode => TREE_BY[F.BASIC[k].unlock];
 export function baseUnlocked(k: BaseKey): boolean {
   return owns(F.BASIC[k].unlock);
@@ -294,7 +299,7 @@ export function itemGradeCap(): number {
 /** 지금 떨어지는 아이템 풀(등급 제한) */
 export function itemPool(): ItemDef[] {
   const cap = itemGradeCap();
-  return ITEMS.filter((it) => it.grade <= cap);
+  return ITEMS.filter((it) => it.grade <= cap && it.district === S.district && districtUnlocked(it.district));
 }
 export function itemCost(id: string): Cost {
   const I = F.ITEM;
@@ -305,17 +310,16 @@ export function itemCost(id: string): Cost {
 export function canBuyItem(id: string): boolean {
   const lv = S.items[id] || 0;
   if (!lv || lv >= F.ITEM.max) return false;
-  if ((ITEM_BY[id].grade || 1) > itemGradeCap()) return false;
+  if ((ITEM_BY[id].grade || 1) > itemGradeCap() || !districtUnlocked(ITEM_BY[id].district)) return false;
   return payable(itemCost(id));
 }
 export function itemEffectValue(id: string, lv: number): number {
   const it = ITEM_BY[id];
-  const cp = CHAR_BY[S.rep] || CHAR_BY.bear;
-  return it.v * lv * (1 + (cp.eff.itemPow || 0));
+  return it.v * lv * (1 + E.itemPow);
 }
 
 /* ── 레벨 ──────────────────────────────────────── */
-/** 경험치 더하기. 오른 레벨 수 반환 */
+/** 사용자수 더하기. 오른 레벨 수 반환 */
 export function addXp(n: number): number {
   S.xp += n;
   let up = 0;

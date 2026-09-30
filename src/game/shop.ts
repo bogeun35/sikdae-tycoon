@@ -9,7 +9,7 @@ import {
 } from './rules';
 import { S } from './state';
 
-/** 성장 트리 한 칸 한 레벨(영업 가지·공통 = 매출, 기술 가지 = 기술력) */
+/** 성장 트리 한 칸 한 레벨(영업력·공통 = 매출, 기술력 = 기술력) */
 export function buyNode(n: TreeNode): boolean {
   if (!canBuyNode(n)) return false;
   const c = nodeCostObj(n);
@@ -21,7 +21,7 @@ export function buyNode(n: TreeNode): boolean {
   return true;
 }
 
-/** 기본 역량(설득력·영업 반경) 한 레벨 — 해금 칸 보유 뒤, 매출 */
+/** 기본 역량(영업기술·제품기술) 한 레벨 — 해금 칸 보유 뒤, 매출 */
 export function canBuyBase(k: BaseKey): boolean {
   return canBuyBaseLv(k);
 }
@@ -57,14 +57,14 @@ export function buyMastery(t: TargetDef): boolean {
   return true;
 }
 
-/** 영업 대표 영입(무료) — 영입하면 바로 배정 */
+/** 직원 선택 영입(무료) — 영입하면 바로 배정 */
 export function canHireRep(id: string): boolean {
   return !!CHAR_BY[id] && !S.reps[id] && repUnlocked(id);
 }
 export function hireRep(id: string): boolean {
   if (!canHireRep(id)) return false;
   S.reps[id] = 1;
-  S.rep = id;
+  S.rep = 'lion';
   refreshEff();
   return true;
 }

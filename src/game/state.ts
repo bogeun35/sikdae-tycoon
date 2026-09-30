@@ -5,6 +5,7 @@
  * 읽지 않고 새로 시작한다(재화·반경·비용 단위가 전부 바뀌어 옛 진행을 옮기면 폭주·막힘). 화면 설정만 옮기고 한 번 알림.
  * 저장 코드 가져오기도 ver 가 다르면 받지 않는다.
  */
+import type { StrategyId } from './strategy';
 import { storage } from '../storage';
 import { F, TREE_BY, type DistrictId } from './data';
 
@@ -25,9 +26,9 @@ export interface BestDeal { id: string; gmv: number; rev: number }
 export interface SaveState {
   ver: number;
   treeVer: number;
-  /** 보유 매출(쓰는 재화 1: 영업 가지·공통 칸·기본 역량·거래처 관리) */
+  /** 보유 매출(쓰는 재화 1: 영업력·공통 칸·기본 역량·거래처 관리) */
   revenue: number;
-  /** 보유 기술력(쓰는 재화 2: 기술 가지·영업 스킬·아이템 강화) */
+  /** 보유 기술력(쓰는 재화 2: 기술력·영업 스킬·아이템 강화) */
   tech: number;
   /** 누적 거래액 — 절대 줄지 않음 */
   gmv: number;
@@ -55,6 +56,7 @@ export interface SaveState {
   revBy: Record<string, number>;
   seen: Record<string, number>;
   rep: string;
+  strategy: StrategyId;
   reps: Record<string, number>;
   district: DistrictId;
   /** 누적 영업일(한 판 = 1영업일, 판 끝에 +1 · 정산 모달 "N영업일이 지났습니다") */
@@ -65,6 +67,7 @@ export interface SaveState {
   /** 고객사·제휴점 수 = 누적 계약 수 (기업 / 식당) */
   netC: number;
   netR: number;
+  netRUnit: number;
   /** 결제 대기(반대편이 0곳일 때) */
   pendG: number;
   pendC: number;
@@ -101,7 +104,8 @@ export function fresh(): SaveState {
     gmvBy: {},
     revBy: {},
     seen: {},
-    rep: 'bear',
+    rep: 'lion',
+    strategy: 'sales',
     reps: { bear: 1 },
     district: 'euljiro',
     runs: 0,
@@ -109,6 +113,7 @@ export function fresh(): SaveState {
     best: null,
     netC: 0,
     netR: 0,
+    netRUnit: 10,
     pendG: 0,
     pendC: 0,
     ending: 0,
@@ -179,6 +184,8 @@ export function loadGame(): boolean {
     return false;
   }
   const st = deepMerge(fresh(), raw);
+  if (raw.netRUnit !== 10) st.netR *= 10;
+  st.netRUnit = 10;
   if (st.treeVer !== F.SAVE.treeVer) {
     /* 옛 트리 → 비우고 쓴 매출·기술력 전액 환불 */
     st.tree = {};
@@ -191,7 +198,7 @@ export function loadGame(): boolean {
   }
   /* 사라진 칸 정리 */
   for (const id of Object.keys(st.tree)) if (!TREE_BY[id]) delete st.tree[id];
-  if (!st.reps[st.rep]) st.rep = 'bear';
+  st.rep = 'lion';
   st.reps.bear = 1;
   S = st;
   return true;
@@ -235,6 +242,8 @@ export function importCode(code: string): 'ok' | 'old' | 'bad' {
     if (!isObj(v) || typeof v.revenue !== 'number') return 'bad';
     if (v.ver !== F.SAVE.ver) return typeof v.ver === 'number' && v.ver < F.SAVE.ver ? 'old' : 'bad';
     S = deepMerge(fresh(), v);
+    if (v.netRUnit !== 10) S.netR *= 10;
+    S.netRUnit = 10;
     saveGame();
     return 'ok';
   } catch {

@@ -243,7 +243,7 @@ function settleHtml(o: SettleOpts): string {
   const showBonus = Math.floor(s.bonus) >= 1;
   /* 합계는 화면에 보이는 세 값(두 단위 아래 버림)을 더한 값. 합계는 아랫단위를 버리지 않고 표기(fmtAll) — 보이는 항목을 더하면 합계와 맞게 */
   const sumShown = shown(s.comm) + shown(s.fee) + (showBonus ? shown(s.bonus) : 0);
-  /* 제목 = 누적 영업일. 순서(설계서 1장): 매출 합계(가장 큼) → 수수료·이용료 → 기술력(둘째) → 계약·매칭 → 식대 거래액(작은 줄).
+  /* 제목 = 누적 영업일. 순서(설계서 1장): 매출 합계(가장 큼) → 수수료·이용료 → 기술력(둘째) → 계약·밸런스계약 → 식대 거래액(작은 줄).
      고객사/제휴점 수는 계약 칸 아래에, 요율 풀이는 설정 > 어떻게 하나요에만 */
   const html = `
     <h2>${imgFast('ic.contracts')}${fmt(o.runNo)}영업일이 지났습니다</h2>
@@ -258,9 +258,9 @@ function settleHtml(o: SettleOpts): string {
     <div class="techline">${imgFast('ic.tech')}<span class="lb">기술력</span><b data-count="${Math.floor(s.tech)}" data-pre="+">+0</b></div>
     </div><div class="col">
     <div class="res">
-      <div>${imgFast('ic.contracts')}계약<b data-count="${s.count}" data-suf="곳">0곳</b><span class="note">${nb(`고객사 ${fmt(s.corps)} · 제휴점 ${fmt(s.stores)}`)}</span></div>
-      <div>${imgFast('ic.match')}최고 매칭<b>×${s.bestM.toFixed(2)}</b></div>
-      <div>${imgFast('ic.xp')}경험치<b data-count="${Math.floor(s.xp)}" data-pre="+">+0</b></div>
+      <div>${imgFast('ic.contracts')}계약<b data-count="${s.count}" data-suf="건">0건</b><span class="note">${nb(`고객사 ${fmt(s.corps)} · 제휴점 ${fmt(s.stores)}`)}</span></div>
+      <div>${imgFast('ic.match')}최고 밸런스계약<b>×${s.bestM.toFixed(2)}</b></div>
+      <div>${imgFast('ic.xp')}사용자수<b data-count="${Math.floor(s.xp)}" data-pre="+">+0</b></div>
       <div>${imgFast('ic.crit')}대박 계약<b>${fmt(s.crits)}번</b></div>
     </div>
     <div class="gmvline">${imgFast('ic.gmv')}식대 거래액<b data-count="${Math.floor(s.gmv)}" data-pre="+" data-suf="원">+0원</b></div>
@@ -365,5 +365,5 @@ export function districtModal(onPick: (id: DistrictId) => void): void {
 }
 
 export function repName(): string {
-  return (CHAR_BY[S.rep] || CHAR_BY.bear).name;
+  return (CHAR_BY.lion || CHAR_BY.bear).name;
 }

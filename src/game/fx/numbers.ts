@@ -2,7 +2,7 @@
  * 계약 숫자 — 큰 줄 = 매출(주인공), 액수가 클수록 크고 뜨겁게(v2 설계서 1장).
  *   mag = log10(max(1, 매출 ÷ (VALUE_SCALE × revK × 판 배율))) × magK, 크기 = (20 + min(44, 6.5 × mag)) × 1.5 × (대박 1.25) × (보스 1.35)
  *   색 6단계, mag 4 이상 글로우. 등장 튀기 0.79 → 1.11 → 1.05, 0.7초부터 흐려짐, 1.25초 동안 52px 떠오름.
- *   아래 둘째 줄 = 톱니 + 기술력(0.5배, 하늘, 0.08초 늦게) · 셋째 줄 = "거래액 N원"(0.36배, 0.12초 늦게). 경험치 줄은 없음.
+ *   아래 둘째 줄 = 톱니 + 기술력(0.5배, 하늘, 0.08초 늦게) · 셋째 줄 = "거래액 N원"(0.36배, 0.12초 늦게). 사용자수 줄은 없음.
  *   결제 대기 식당(매출 0원)은 큰 줄 자리에 "결제 대기", 거래액 줄에 대기 금액. 반경 120·0.25초 안 숫자는 합침.
  * 이벤트 글자(입소문!·핫플!·기술력 +N …)도 같은 풀을 쓴다.
  * 겹침: 큰 숫자가 늘 위에 그려지고(zIndex), 매 프레임 금액끼리 크게 겹치면 작은 쪽이 자리를 내준다(바로 흐려짐).
@@ -25,7 +25,7 @@ const DIRS_DOWN = [0, 1, 2];
 const POP_MAX = 1.12;
 /** 화면에서 금액·부속 줄(기술력·거래액)이 이보다 작아지지 않게(CSS px) */
 /* 폰 세로처럼 지도가 작게 보여도 매출 숫자가 기술력·거래액 줄(최소 8~9px)보다 확실히 크게 */
-const MIN_MAIN_PX = 13;
+const MIN_MAIN_PX = 23;
 const MIN_LINE_PX = typeof N.gmvLine?.minPx === 'number' ? N.gmvLine.minPx : 8;
 /** 매출 눈금: 매출 ÷ (VALUE_SCALE × revK) 가 거래액 눈금과 같은 폭이 되게(수수료율 10%) */
 const REV_K: number = typeof N.revK === 'number' ? N.revK : 0.1;
@@ -64,7 +64,7 @@ interface NumE {
   t: number; x: number; y: number; vx: number; size: number; val: number; revV: number; techV: number; gmvV: number; pend: boolean; mag: number; kind: 'num' | 'ev'; alive: boolean;
   /** 보스 숫자: 배너·보스 도장만 비킴(다른 도장은 무시 — 절정 숫자가 작은 도장들에 밀려 멀리 가지 않게) */
   boss: boolean;
-  /** 같은 key 의 글자는 한 개만(매칭 ×N! 처럼 연달아 오르는 것은 떠 있는 글자를 바꿔 씀) */
+  /** 같은 key 의 글자는 한 개만(밸런스계약 ×N! 처럼 연달아 오르는 것은 떠 있는 글자를 바꿔 씀) */
   key: string;
   bound: { x0: number; x1: number; y0: number };
   /** 다른 숫자에 자리를 내주고 흐려지는 중 */

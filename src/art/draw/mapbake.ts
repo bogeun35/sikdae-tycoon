@@ -106,6 +106,14 @@ export function bakeMap(g: G, m: MapData, res: number, sprite?: (key: string) =>
   bridges(c);
   edges(c);
   flavor(c);
+  // A district-colored pavement sign remains recognizable on procedurally generated maps.
+  g.save();
+  const signW = Math.min(350, m.W * 0.58), sx = (m.W-signW)/2, sy = m.area.y + 8;
+  g.fillStyle = p.accent; g.globalAlpha = 0.9;
+  g.beginPath(); g.roundRect(sx,sy,signW,42,12);g.fill();
+  g.globalAlpha = 1;g.fillStyle='#ffffff';g.font='bold 23px Jua, sans-serif';g.textAlign='center';g.textBaseline='middle';
+  const landmarks: Record<string,string> = {euljiro:'골목 상권',gangnam:'스타트업 거리',yeouido:'한강 금융가',pangyo:'네온 테크밸리',magok:'초록 연구단지',sejong:'벚꽃 정부청사'};
+  g.fillText(d.name+' · '+landmarks[m.district],m.W/2,sy+22,signW-16);g.restore();
   if (sprite) decor(c, sprite);
 }
 

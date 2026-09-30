@@ -21,7 +21,7 @@ import { TreeView } from './tree';
 import { OfficeHud, levelInfo, modLine } from '../../ui/hud';
 import { Panels, type PanelHooks } from '../../ui/panels';
 import { Sheet } from '../../ui/sheet';
-import { $, img, tapKey, toast } from '../../ui/dom';
+import { img, tapKey, toast } from '../../ui/dom';
 import { confirmBox, districtModal } from '../../ui/modals';
 import { keyChip } from '../../ui/kinds';
 import { screenToFx } from '../core/stage';
@@ -86,7 +86,7 @@ export class OfficeScene {
     this.hud.onLevelTap = () => {
       sfx('ui_tap');
       const li = levelInfo();
-      this.sheet.show('ic.level', li.title, li.desc, { extra: `<span class="pz ok">${img('ic.xp')}<small class="hl">경험치 ${fmt(S.xp)}</small></span>` });
+      this.sheet.show('ic.level', li.title, li.desc, { extra: `<span class="pz ok">${img('ic.xp')}<small class="hl">사용자수 ${fmt(S.xp)}</small></span>` });
       if (this.tab === null) this.openTab('tree');
     };
   }
@@ -189,17 +189,22 @@ export class OfficeScene {
 
   private renderTreeHead(): void {
     const st = statLevels();
-    /* 가지 이름 옆 아이콘 = 그 가지를 사는 재화(영업 가지 = 매출 동전, 기술 가지 = 기술력 톱니) */
+    /* 가지 이름 옆 아이콘 = 그 가지를 사는 재화(영업력 = 매출 동전, 기술력 = 기술력 톱니) */
     const bar = (cls: string, icon: string, name: string, v: number, mx: number, col: string) =>
       `<div class="th ${cls}">${img(icon)}<span>${name}&nbsp;${v}/${mx}</span><div class="thb"><i style="width:${Math.min(100, (v / mx) * 100)}%;background:${col}"></i></div></div>`;
+    const center = this.hud.treeHead.querySelector<HTMLButtonElement>('[data-a="center"]');
     this.hud.treeHead.innerHTML =
-      bar('l', 'ic.revenue', '영업 가지', st.sales, STAT_MAX.sales, 'linear-gradient(90deg,#ffb09a,#ff7b5e)') +
-      bar('r', 'ic.tech', '기술 가지', st.tech, STAT_MAX.tech, 'linear-gradient(90deg,#9fd3ff,#4aa3df)') +
-      `<div class="tcenter pe" data-a="center">${img('ic.back')}가운데로</div>`;
-    $(this.hud.treeHead, '[data-a="center"]')?.addEventListener('pointerdown', () => {
-      sfx('ui_tap');
-      this.tree?.center();
-    });
+      bar('l', 'ic.revenue', '영업력', st.sales, STAT_MAX.sales, 'linear-gradient(90deg,#ffb09a,#ff7b5e)') +
+      bar('r', 'ic.tech', '기술력', st.tech, STAT_MAX.tech, 'linear-gradient(90deg,#9fd3ff,#4aa3df)') +
+      '';
+    const button = center || document.createElement('button');
+    if (!center) {
+      button.className = 'tcenter pe'; button.dataset.a = 'center'; button.type = 'button';
+      button.innerHTML = `${img('ic.back')}가운데로`;
+      button.addEventListener('click', () => { sfx('ui_tap'); this.tree?.center(); });
+    }
+    this.hud.treeHead.appendChild(button);
+
   }
 
   /* ── 트리 칸 ── */
@@ -226,15 +231,14 @@ export class OfficeScene {
       desc = `${n.ef === 'chest' ? '선물 상자' : '인바운드 문의'} ${tg}등급`;
     } else if (n.ef === 'tv') {
       const list = (Array.isArray(tg) ? tg : String(tg).split(',')).map((id) => TARGET_BY[id]?.name).filter(Boolean);
-      desc = `${list.join('·')} 계약 가치 ${fmtVal('p', n.ef, sum(l))}${l < n.max ? ` → ${fmtVal('p', n.ef, sum(l + 1))}` : ''}`;
+      desc = `${list.join('·')} 계약 규모 ${fmtVal('p', n.ef, sum(l))}${l < n.max ? ` → ${fmtVal('p', n.ef, sum(l + 1))}` : ''}`;
     } else if (n.f !== 'u') {
       const cur = fmtVal(n.f, n.ef, sum(l));
       const nx = l < n.max ? fmtVal(n.f, n.ef, sum(l + 1)) : '';
       const tgName = n.ef === 'cds' || n.ef === 'dbl' ? `${SKILLS[String(tg) as keyof typeof SKILLS]?.name || ''} ` : '';
-      desc = `${tgName}${labText(n.lab)} · ${l ? cur : '없음'}${nx ? ` → ${nx}` : ''}`;
+      desc = `${tgName}${labText(n.lab)} · ${l ? cur : '0'}${nx ? ` → ${nx}` : ''}`;
     }
-    const br = n.br === 'sales' ? '영업 가지' : n.br === 'tech' ? '기술 가지' : '공통';
-    return { title, desc: `${desc} · ${br}` };
+    return { title, desc: `${n.help ? n.help + '<br>' : ''}${desc}` };
   }
   private showNode(n: TreeNode): void {
     const { title, desc } = this.nodeDesc(n);
@@ -289,7 +293,7 @@ export class OfficeScene {
       toast(`새 거래처: ${t.name}`, `t.${t.id}@idle`);
     } else if (n.ef === 'cap') {
       const c = CHAR_BY[tg];
-      toast(`${c.name} 영입 가능`, `c.${c.id}@idle`);
+      toast(`${c.name} 고용 가능`, `c.${c.id}@idle`);
     } else if (n.ef === 'sk') {
       const s = SKILLS[tg as keyof typeof SKILLS];
       toast(`새 스킬: ${s.name}`, `ic.${s.icon}`);
@@ -312,6 +316,7 @@ export class OfficeScene {
 
   refresh(): void {
     this.hud.update();
+    this.hud.renderDistrict();
     this.hud.setAlerts(this.alerts());
     this.tree?.rebuild();
     if (this.tab === 'tree') this.renderTreeHead();

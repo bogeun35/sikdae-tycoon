@@ -1,7 +1,7 @@
 /**
  * 캔버스 글자용 BitmapFont (loadFonts() 뒤 설치). 색은 흰 글자 + tint 로 바꾼다(테는 짙은 갈색 #4a2f12).
  *  - num: 계약 매출 "+12원"·기술력 숫자 (0~9 , + × . ! % 만 억 조 경 해 원, 결제 대기)
- *  - ev : 이벤트 글자(입소문!·핫플!·소개 영업!·대박!·기술력 +N·매칭 ×N·LEVEL UP!)
+ *  - ev : 이벤트 글자(입소문!·핫플!·소개 영업!·대박!·기술력 +N·밸런스계약 ×N·LEVEL UP!)
  * 트리 칸 가격·레벨 배지는 BitmapText 를 쓰지 않는다(office/tree.ts 의 Pixi Text — 1배 화면에서 쉼표가 점으로 뭉개져서).
  */
 import { BitmapFont } from 'pixi.js';
@@ -24,8 +24,8 @@ export function installFonts(): void {
   const ev = FX.eventText as Record<string, [string, string, number]>;
   const words = [
     ...Object.values(ev).map((v) => v[0]),
-    '영업 성공!', '대박!', 'LEVEL UP!', '매칭', '×', '+', '곳', '초', '0123456789', '.', ',', '-', ' ', '!', '%', '만억조경해자양원', '새 거래처!', '첫 결제 연결!', '결제 대기', '대형 계약', '전국 계약',
-    '경험치', '매출', '거래액', 'NXABCDEFGHIJKLMNOPQRSTUVWYZ',
+    '영업 성공!', '대박!', 'LEVEL UP!', '밸런스계약', '×', '+', '곳', '초', '0123456789', '.', ',', '-', ' ', '!', '%', '만억조경해자양원', '새 거래처!', '첫 결제 연결!', '결제 대기', '대형 계약', '전국 계약',
+    '사용자수', '매출', '거래액', 'NXABCDEFGHIJKLMNOPQRSTUVWYZ',
   ];
   const evChars = Array.from(new Set(words.join('').split(''))).join('');
   BitmapFont.install({

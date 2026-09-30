@@ -377,7 +377,7 @@ async function measureAll(): Promise<{ rows: Row[]; summary: Record<string, unkn
     ['target_appear', { tier: 0 }, '티어 0'], ['target_appear', { tier: 20 }, '티어 20'],
     ['persuade', { tier: 0 }, '게이지 가득 400Hz'], ['persuade', { tier: 20 }, '게이지 거의 0 1200Hz'],
     ['coin_arrive', { tier: 0 }, '작은 액수 1음'], ['coin_arrive', { tier: 10 }, '중간 3음'], ['coin_arrive', { tier: 20 }, '큰 액수 4음'], ['coin_arrive', { pitch: 1.48 }, '본체 연속 도착 배율 최대'],
-    ['match_up', { tier: 0 }, '매칭 1단계'], ['match_up', { tier: 6 }, '매칭 7단계'],
+    ['match_up', { tier: 0 }, '밸런스계약 1단계'], ['match_up', { tier: 6 }, '밸런스계약 7단계'],
     ['lunch_tick', { tier: 1 }, '마지막 1초 1500Hz'],
     ['ui_click', { pan: -1 }, '왼쪽 끝'], ['contract_xl', { vol: 2 }, '음량 2배 (리미터 확인)'],
   ];

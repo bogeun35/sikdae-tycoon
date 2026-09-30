@@ -54,7 +54,7 @@ export class LunchScene {
       skillFired: (sk: SkillId) => this.hud.fire(sk),
       matchUp: (step, M) => {
         this.hud.matchPop();
-        this.view.nums.text(this.lunch.net.x, this.lunch.area.y0 + 60, `매칭 ×${[1.25, 1.5, 1.75, 2, 2.5, 3][step - 1] ?? M.toFixed(2)}!`, 0xff8fab, 20 + step * 1.5, 'match');
+        this.view.nums.text(this.lunch.net.x, this.lunch.area.y0 + 60, `밸런스계약 ×${[1.25, 1.5, 1.75, 2, 2.5, 3][step - 1] ?? M.toFixed(2)}!`, 0xff8fab, 20 + step * 1.5, 'match');
       },
       portrait: (k) => this.hud.portrait(k),
       itemGet: (id, isNew) => {

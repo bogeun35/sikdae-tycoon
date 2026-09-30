@@ -23,12 +23,13 @@ export interface CharDef { id: string; name: string; animal: string; eff: Record
 export interface SkillSlot { p: string; n: string; ic: string; ds: string; max: number; need?: number; nl?: number; kind: KindId; chip: string }
 export interface SkillDef { name: string; icon: string; orig: string; cd: number; d: string; unlockName: string; sk: SkillSlot[]; unlock: string }
 /** grade = 등급 1~20(설계서 4-2): 해금한 대상 수 ≥ max(4, grade) 부터 떨어짐, 강화 첫 값도 등급 순 */
-export interface ItemDef { id: string; name: string; k: string; v: number; u: string; look: string; grade: number; kind: KindId; chip: string }
+export interface ItemDef { district: DistrictId; id: string; name: string; k: string; v: number; u: string; look: string; grade: number; kind: KindId; chip: string }
 export interface DistrictDef { id: DistrictId; name: string; unlock: string; mod: Record<string, number>; note: string; look: string; pal: Record<string, string>; deco: string[]; weight: Record<string, number> }
 export interface TreeNode {
   x: number; y: number; id: string; name: string; ef: string; tg: string | number | string[] | null; max: number; icon: string; link: string[];
   d: number; br: 'sales' | 'tech' | 'common'; f: string; key: boolean; vals: number[]; costs: number[]; lab: string;
   /** 잠김(설계서 4-1): req = 전부 보유해야, reqAny = 하나 이상 보유해야 강화 가능 */
+  help?: string;
   req?: string[]; reqAny?: string[];
 }
 export interface Rect { x: number; y: number; w: number; h: number }

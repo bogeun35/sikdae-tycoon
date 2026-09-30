@@ -67,7 +67,7 @@ async function domGallery(): Promise<void> {
     const ks = by('t.').sort((a, b) => (a.split('@')[0] === b.split('@')[0] ? 0 : a < b ? -1 : 1));
     ps.push(...group(ks, '대상', Z || 1.2, BG ? undefined : '#e9d6b3'));
   }
-  if (want('chars')) ps.push(...group(by('c.'), '영업 대표', Z || 0.7));
+  if (want('chars')) ps.push(...group(by('c.'), '직원 선택', Z || 0.7));
   if (want('items')) ps.push(...group(by('i.'), '아이템', Z || 1));
   if (want('icons')) ps.push(...group(by('ic.'), '아이콘', Z || 1));
   if (want('decor')) ps.push(...group(by('d.'), '장식', Z || 1, BG ? undefined : '#e9d6b3'));

@@ -2,7 +2,7 @@
  * 배경·로고 — bg.title@land|port (lazy) · bg.office.sky · bg.office.skyline · bg.office.skylineFar · bg.cloud0~2 · ui.logo
  *   타이틀: 한낮 하늘 + 먼 스카이라인 + 아래쪽에 원근으로 눕힌 탑뷰 상권 지도(블록·도로·횡단보도·가로수·콩눈 건물들)
  *   사무실 스카이라인: 가로로 이어붙여도 이음매 없음(건물은 0~1920 안, 가로수는 양끝에서 감아 그림)
- *   ui.logo: 식권 티켓 엠블럼(주황 톱니 티켓 + 금 테) 앞에 곰대리 상반신이 엄지 척. 글자는 엔진이 얹음(아래쪽 비움)
+ *   ui.logo: 식권 티켓 엠블럼(주황 톱니 티켓 + 금 테) 앞에 사업대장 상반신이 엄지 척. 글자는 엔진이 얹음(아래쪽 비움)
  */
 import type { Body } from '../render';
 import { C, E, G, P, PL, R, Svg, darken, edge, face, hashId, lighten, mix, n2, rng, roundPoly, sparkle, ticketPath, wonPath, type Mood } from '../kit';
@@ -416,7 +416,7 @@ function treeAt(cam: Cam, X: number, Z: number, k = 1): string {
 /* ───────── 로고 ───────── */
 
 function logo(): string {
-  // 640×360. 티켓 엠블럼(뒤) + 곰대리 상반신(앞) 엄지 척. 아래 y 290~360 은 제목 글자가 겹침
+  // 640×360. 티켓 엠블럼(뒤) + 사업대장 상반신(앞) 엄지 척. 아래 y 290~360 은 제목 글자가 겹침
   let s = '';
   // 뒤 햇살 반짝
   s += E(320, 190, 300, 170, { fill: sv.rad([[0, '#fff6c8', 0.85], [0.6, '#fff6c8', 0.25], [1, '#fff6c8', 0]]) });
@@ -437,7 +437,7 @@ function logo(): string {
   s += G(t, { tf: 'rotate(-3 320 214)' });
   // 반짝이
   s += sparkle(64, 92, 16) + sparkle(586, 84, 20) + sparkle(610, 150, 9, '#ffb3c1') + sparkle(36, 150, 10, '#ffb3c1') + sparkle(470, 40, 10);
-  // 곰대리 (256 좌표 → 스케일 1.3, 머리 가운데 (320, 128))
+  // 사업대장 (256 좌표 → 스케일 1.3, 머리 가운데 (320, 128))
   const k = 1.3;
   const fig = charFigure('bear', 'idle', sv);
   const tx = 320 - 128 * k, ty = 128 - 114 * k;

@@ -1,5 +1,5 @@
 /**
- * HUD(DOM): 사무실 좌상단(레벨·재화·고객사/제휴점·힌트) + 우상단 메뉴 원, 영업 HUD(타이머·매칭·결제 대기·대표 초상·스킬 슬롯).
+ * HUD(DOM): 사무실 좌상단(레벨·재화·고객사/제휴점·힌트) + 우상단 메뉴 원, 영업 HUD(타이머·밸런스계약·결제 대기·대표 초상·스킬 슬롯).
  * 재화 순서 = 매출 → 기술력(같은 크기 알약, 주인공) → 누적 식대 거래액(작은 칩, 쓰지 않는 기록). 설계서 1장.
  * 숫자는 표시값 += (실제 − 표시값) × min(1, dt × 7) 로 따라 올라가고, 오르면 알약이 1.14배 튄다.
  */
@@ -47,9 +47,9 @@ export function snapDisplay(): void {
 
 const MENU: { tab: string; icon: string; name: string }[] = [
   { tab: 'tree', icon: 'ic.tab_tree', name: '성장 트리' },
-  { tab: 'reps', icon: 'ic.tab_reps', name: '영업 대표' },
+  { tab: 'reps', icon: 'ic.tab_reps', name: '인재·경영 방향' },
   { tab: 'dex', icon: 'ic.tab_dex', name: '도감' },
-  { tab: 'items', icon: 'ic.tab_items', name: '영업 아이템' },
+  { tab: 'items', icon: 'ic.tab_items', name: '지역 유물' },
   { tab: 'skills', icon: 'ic.tab_skills', name: '영업 스킬' },
 ];
 
@@ -215,15 +215,15 @@ export class OfficeHud {
 
 export function modLine(mod: Record<string, number>): string {
   const parts: string[] = [];
-  if (mod.spawn) parts.push(`대상 +${Math.round(mod.spawn * 100)}%`);
-  if (mod.storeBias) parts.push(`식당 ×${mod.storeBias}`);
-  if (mod.corpBias) parts.push(`기업 ×${mod.corpBias}`);
+  if (mod.spawn) parts.push(`고객서치 +${Math.round(mod.spawn * 100)}%`);
+  if (mod.storeBias) parts.push(`식당 탐색 우대`);
+  if (mod.corpBias) parts.push(`기업 탐색 우대`);
   if (mod.bigBias) parts.push(`대형 ×${mod.bigBias}`);
   if (mod.gmv) parts.push(`거래액 +${Math.round(mod.gmv * 100)}%`);
   if (mod.chest) parts.push(`선물 +${Math.round(mod.chest * 100)}%`);
   if (mod.tech) parts.push(`기술력 +${Math.round(mod.tech * 100)}%`);
-  if (mod.xp) parts.push(`경험치 +${Math.round(mod.xp * 100)}%`);
-  if (mod.rare) parts.push(`희귀 +${Math.round(mod.rare * 100)}%`);
+  if (mod.xp) parts.push(`사용자수 +${Math.round(mod.xp * 100)}%`);
+  if (mod.rare) parts.push(`행운 +${Math.round(mod.rare * 100)}%`);
   if (mod.dark) parts.push('야근 모드');
   /* 항목 안("기술력 +40%")에서는 줄이 갈리지 않게 줄바꿈 없는 공백(nbsp)으로, 항목 사이(·)에서만 줄바꿈 */
   return parts.map((t) => t.replace(/ /g, '\u00a0')).join(' · ') || '기본 상권';
@@ -232,14 +232,14 @@ export function modLine(mod: Record<string, number>): string {
 export function hintText(): string {
   const nu = nextMasteryUnlock(S.lv);
   if (nu) return `Lv.${nu.masteryLv} → ${nu.name} 관리 열림`;
-  return `설득력 +${Math.round((lvPowerMult(S.lv) - 1) * 100)}%`;
+  return `영업기술 +${Math.round((lvPowerMult(S.lv) - 1) * 100)}%`;
 }
 /** 레벨 설명 바: 다음 거래처 관리는 옆 힌트 알약에 있어 여기서는 뺀다 */
 export function levelInfo(): { title: string; desc: string } {
   const need = xpNeed(S.lv);
   return {
     title: `레벨 ${S.lv}`,
-    desc: `설득력 ×${lvPowerMult(S.lv).toFixed(2)} · 다음 레벨까지 경험치 ${fmt(Math.max(0, need - S.xp))}`,
+    desc: `영업기술 ×${lvPowerMult(S.lv).toFixed(2)} · 다음 레벨까지 사용자수 ${fmt(Math.max(0, need - S.xp))}`,
   };
 }
 
@@ -262,7 +262,7 @@ export class LunchHud {
         <div class="r1">${lvlPill()}${curRow(true)}<div class="sp"></div><div class="timer" data-v="timer">${img('ic.timer')}<span class="tts" data-v="tt"><canvas class="ttc"></canvas></span></div></div>
         <div class="r2x">${curRow(true)}</div>
         <div class="r2">
-          <div class="match" data-v="match">${img('ic.corp')}<span data-v="mc">0</span> : ${img('ic.store')}<span data-v="mr">0</span><span class="mm" data-v="mm">매칭 ×1.00</span><div class="mb2"><i data-v="mbar"></i></div></div>
+          <div class="match" data-v="match">${img('ic.corp')}<span data-v="mc">0</span> : ${img('ic.store')}<span data-v="mr">0</span><span class="mm" data-v="mm">밸런스계약 ×1.00</span><div class="mb2"><i data-v="mbar"></i></div></div>
           <div class="pend" data-v="pend" data-hud="hud.pending" style="display:none">${img('ic.pending')}<span data-v="pendt">결제 대기</span></div>
           <div class="sp"></div><div class="brk"></div>
           <div class="dname" data-v="dname"></div>
@@ -316,7 +316,7 @@ export class LunchHud {
   private modeNow = '';
   /**
    * 폰 세로: 상권 이름·전체화면 버튼은 지도 위를 가리지 않게 아래 띠 왼쪽(사무실로 버튼과 같은 줄)으로.
-   * 낮은 가로 화면(폰 가로): 매칭·결제 대기 알약을 첫 줄(재화 알약 오른쪽)로 올림 — 두 줄이면 지도 맨 윗줄 부지를 덮음.
+   * 낮은 가로 화면(폰 가로): 밸런스계약·결제 대기 알약을 첫 줄(재화 알약 오른쪽)로 올림 — 두 줄이면 지도 맨 윗줄 부지를 덮음.
    */
   place(): void {
     const ui = document.getElementById('ui')!;
@@ -364,7 +364,7 @@ export class LunchHud {
     const d = DISTRICT_BY[S.district];
     const dn = $(this.root, '[data-v="dname"]');
     if (dn) dn.innerHTML = `${img('ic.pin')}${d.name}<span data-v="spd"></span>`;
-    const rep = CHAR_BY[S.rep] || CHAR_BY.bear;
+    const rep = CHAR_BY.lion || CHAR_BY.bear;
     /* 초상은 평소·환호 두 장을 미리 넣고 보이기만 바꿈(설계서 7장 3: 계약마다 innerHTML 로 SVG 그림을 새로 만들지 않게) */
     for (const p of $$(this.root, '.lportrait')) {
       p.innerHTML = img(`c.${rep.id}@idle`, 'pi') + img(`c.${rep.id}@cheer`, 'pc');
@@ -484,7 +484,7 @@ export class LunchHud {
   }
   private tick(lunch: { cN: number; rN: number; M: number; matchStep: number; cd: Record<string, number>; lacking(): 'corp' | 'store' | null; cooldown(id: SkillId): number }): void {
     this.place();
-    /* DOM 글자(레벨·경험치·매칭·결제 대기)는 0.5초마다 한 번에 씀 — 글자가 바뀐 프레임마다 레이아웃이라 10Hz 면 초당 최대 10번(설계서 7장 3: ≤ 3회/초).
+    /* DOM 글자(레벨·사용자수·밸런스계약·결제 대기)는 0.5초마다 한 번에 씀 — 글자가 바뀐 프레임마다 레이아웃이라 10Hz 면 초당 최대 10번(설계서 7장 3: ≤ 3회/초).
        자주 바뀌는 재화·+N·스킬 재사용 숫자는 캔버스(레이아웃 없음), 막대는 transform */
     this.domTick = (this.domTick + 1) % 5;
     const domNow = this.domTick === 0 || this.domForce;
@@ -538,7 +538,7 @@ export class LunchHud {
     g('tech');
     setDom('mc', String(lunch.cN));
     setDom('mr', String(lunch.rN));
-    setDom('mm', `매칭 ×${lunch.M.toFixed(2)}`);
+    setDom('mm', `밸런스계약 ×${lunch.M.toFixed(2)}`);
     const steps = [1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4];
     const i = Math.min(steps.length - 2, lunch.matchStep);
     const lo = steps[i];
@@ -608,7 +608,7 @@ export class LunchHud {
     }
   }
   private fitAt = 0;
-  /** 폰 가로: 첫 줄이 넘치면 .tight(매칭 막대 빼기·경험치 막대 줄이기) → .tight2(경험치 막대 빼기). 글자 길이가 바뀔 때만, 0.4초에 한 번 */
+  /** 폰 가로: 첫 줄이 넘치면 .tight(밸런스계약 막대 빼기·사용자수 막대 줄이기) → .tight2(사용자수 막대 빼기). 글자 길이가 바뀔 때만, 0.4초에 한 번 */
   private fitRow(): void {
     if (this.modeNow !== 'flat') return;
     const now = performance.now();
@@ -623,7 +623,7 @@ export class LunchHud {
     if (r1.className !== before) bumpHudVersion();
   }
   private bossGhost = 1;
-  /** 보스 전용 설득 게이지(HUD 가운데 큰 막대). null = 숨김 */
+  /** 보스 전용 사업자 체력(HUD 가운데 큰 막대). null = 숨김 */
   setBoss(r: number | null, dt = 0.016): void {
     const box = this.one('[data-v="boss"]');
     if (!box) return;
@@ -757,7 +757,7 @@ export function tickDisplay(dt: number): void {
   if (disp.revenue > S.revenue) disp.revenue = S.revenue;
   if (disp.tech > S.tech) disp.tech = S.tech;
 }
-export const statMaxText = () => `영업 가지 ${STAT_MAX.sales} · 기술 가지 ${STAT_MAX.tech}`;
+export const statMaxText = () => `영업력 ${STAT_MAX.sales} · 기술력 ${STAT_MAX.tech}`;
 void E;
 /** 표시값이 아직 실제 값을 따라가는 중인지(루프가 잠들지 않게) */
 export function displayBusy(): boolean {

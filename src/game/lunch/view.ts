@@ -1,7 +1,7 @@
 /**
  * 영업 그림(PixiJS). 로직(Lunch)이 알려 주는 사건을 받아 연출한다. 층 순서는 설계서 8-4.
- *  바닥 → 도로 → 그림자 → 배우(y 정렬: 장식·대상·선물·보행자·차) → 구름 그림자 → 설득 게이지 → 스킬 효과 → 문의·아이템
- *  → 판교 어둠·세종 꽃잎 → 영업 반경 → 파티클 → 숫자 → 도장·말풍선 → (화면) 번쩍·비네트
+ *  바닥 → 도로 → 그림자 → 배우(y 정렬: 장식·대상·선물·보행자·차) → 구름 그림자 → 사업자 체력 → 스킬 효과 → 문의·아이템
+ *  → 판교 어둠·세종 꽃잎 → 제품기술 → 파티클 → 숫자 → 도장·말풍선 → (화면) 번쩍·비네트
  */
 import { BitmapText, Container, Graphics, NineSliceSprite, Point, RenderTexture, Sprite, Text, type Renderer, type Texture } from 'pixi.js';
 import gsap from 'gsap';
@@ -620,7 +620,14 @@ export class LunchView implements LunchEvents {
     this.dying.push(tv);
   }
 
+  private streak = 0;
+  private lastContractAt = -100;
   contract(e: Ent, c: ContractResult): void {
+    this.streak = this.lunch.t - this.lastContractAt <= 3 ? this.streak + 1 : 1;
+    this.lastContractAt = this.lunch.t;
+    if (this.streak === 3 || this.streak === 5 || this.streak % 10 === 0) {
+      this.nums.text(this.map.W / 2, this.map.area.y + 95, this.streak + '연속 계약!', 0xffdc75, 30, 'streak');
+    }
     const tv = (e.view as TV) || null;
     const g = CONTRACT_FX[Math.max(0, Math.min(4, c.grade))];
     const crit = c.crit;
@@ -757,7 +764,7 @@ export class LunchView implements LunchEvents {
     return out;
   }
   /**
-   * 화면 위·아래 DOM HUD(재화 알약·레벨·타이머·매칭·초상·보스 게이지·스킬 칸·사무실로)의 자리(숫자 좌표).
+   * 화면 위·아래 DOM HUD(재화 알약·레벨·타이머·밸런스계약·초상·보스 게이지·스킬 칸·사무실로)의 자리(숫자 좌표).
    * DOM 자리(화면 px)는 HUD 배치가 바뀔 때(레이아웃·보스 게이지·결제 대기 알약, hudVersion)만 다시 잰다 — getBoundingClientRect 가
    * 레이아웃을 강제하므로(설계서 7장 3). 안전망 2초. 숫자 좌표로 바꾸는 계산은 프레임마다(흔들림·줌 반영).
    */
@@ -1570,7 +1577,7 @@ export class LunchView implements LunchEvents {
           tv.arrow = null;
         }
       }
-      /* 매칭 부족 쪽: 살짝 들썩 */
+      /* 밸런스계약 부족 쪽: 살짝 들썩 */
       if (lack && e.t.side === lack && !e.boss && ap >= 1) tv.body.y -= Math.abs(Math.sin(this.rt * 5 + tv.ph)) * 3 * pk;
     }
     pills.length = nPill;
