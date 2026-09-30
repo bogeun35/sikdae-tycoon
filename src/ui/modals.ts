@@ -342,7 +342,7 @@ export function districtModal(onPick: (id: DistrictId) => void): void {
       DISTRICTS.map((d) => {
         const un = districtUnlocked(d.id);
         const node = UNLOCK_NODE[d.id];
-        return `<div class="dcard ${d.id === S.district ? 'on' : ''} ${un ? '' : 'lock'}" data-d="${d.id}"><img class="th" ${srcAttr(thumb(d.id))} alt=""><div class="nm">${img(`ic.dist_${d.id}`)}${d.name}</div><div class="ds">${un ? nbNote(d.note) : `${img('ic.lock')} 성장 트리: ${node ? node.name : ''}`}</div><div class="ds" style="color:#a08a6a">${un ? modLine(d.mod) : ''}</div></div>`;
+        return `<div class="dcard ${d.id === S.district ? 'on' : ''} ${un ? '' : 'lock'}" data-d="${d.id}"><img class="th" ${srcAttr(thumb(d.id))} alt=""><div class="nm">${img(`ic.dist_${d.id}`)}${d.name}</div><div class="ds">${un ? nbNote(d.note) : `${img('ic.lock')} 스킬: ${node ? node.name : ''}`}</div><div class="ds" style="color:#a08a6a">${un ? modLine(d.mod) : ''}</div></div>`;
       }).join('') +
       `</div><div class="btns" style="margin-top:12px"><button class="btn light tw" data-a="close">닫기</button></div>`,
     'distpick',

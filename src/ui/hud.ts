@@ -46,18 +46,18 @@ export function snapDisplay(): void {
 }
 
 const MENU: { tab: string; icon: string; name: string }[] = [
-  { tab: 'tree', icon: 'ic.tab_tree', name: '성장 트리' },
-  { tab: 'reps', icon: 'ic.tab_reps', name: '인재·경영 방향' },
-  { tab: 'dex', icon: 'ic.tab_dex', name: '도감' },
-  { tab: 'items', icon: 'ic.tab_items', name: '지역 유물' },
-  { tab: 'skills', icon: 'ic.tab_skills', name: '영업 스킬' },
+  { tab: 'tree', icon: 'ic.tab_tree', name: '스킬' },
+  { tab: 'reps', icon: 'ic.tab_reps', name: '인재영입' },
+  { tab: 'dex', icon: 'ic.tab_dex', name: '기업도감' },
+  { tab: 'items', icon: 'ic.tab_items', name: '유물아이템' },
+  { tab: 'skills', icon: 'ic.tab_skills', name: '역량교육' },
 ];
 
 function curPill(id: 'gmv' | 'revenue' | 'tech', gain = false): string {
   const cls = id === 'gmv' ? 'gmv' : id === 'revenue' ? 'rev' : 'tc';
   const ic = id === 'gmv' ? 'ic.gmv' : id === 'revenue' ? 'ic.revenue' : 'ic.tech';
-  const lab = id === 'gmv' ? '누적 식대 거래액' : id === 'revenue' ? '매출' : '기술력';
-  return `<div class="cur ${cls} pe" data-hud="hud.${id}" title="${lab}">${img(ic)}<b data-v="${id}">0</b>${gain ? `<span class="gain" data-g="${id}"></span>` : ''}</div>`;
+  const lab = id === 'gmv' ? '누적 식대 거래액' : id === 'revenue' ? '자본' : '기술력';
+  return `<div class="cur ${cls} pe" data-hud="hud.${id}" title="${lab}">${id === 'gmv' ? '' : img(ic)}<span class="cur-label">${id === 'gmv' ? '거래액' : lab}</span><b data-v="${id}">0</b>${gain ? `<span class="gain" data-g="${id}"></span>` : ''}</div>`;
 }
 function lvlPill(): string {
   return `<div class="lvl pe clickable" data-hud="hud.level" data-a="level"><div class="n" data-v="lv">1</div><div class="xpbar"><i data-v="xpfill"></i><span data-v="xptxt">0 / 400</span></div></div>`;
@@ -86,15 +86,14 @@ export class OfficeHud {
     this.hud = el(
       'div',
       'hud',
-      `<div class="row">${lvlPill()}<div class="hint pe clickable" data-v="hint" data-a="level"></div></div>
-       <div class="row">${curPill('revenue')}${curPill('tech')}${curPill('gmv')}</div>
-       <div class="row"><div class="chip net pe" data-hud="hud.net">${img('ic.corp')}고객사 <b data-v="netc">0</b>곳 · ${img('ic.store')}제휴점 <b data-v="netr">0</b>곳</div></div>`,
+      `<div class="row company-row"><div class="users pe clickable" data-hud="hud.level" data-a="level"><span>사용자</span><b data-v="users">0</b><span class="user-lv">Lv.<span data-v="lv">1</span></span><div class="user-progress"><i data-v="xpfill"></i></div></div><div class="chip net pe" data-hud="hud.net"><span>고객사</span><b data-v="netc">0</b></div><div class="chip net pe"><span>제휴점</span><b data-v="netr">0</b></div></div>
+       <div class="row finance-row">${curPill('revenue')}${curPill('tech')}${curPill('gmv')}</div>`,
     );
     this.menu = el(
       'div',
       'menu',
-      MENU.map((m, i) => `<button class="mb tw" data-tab="${m.tab}" aria-label="${m.name}">${img(m.icon)}<span class="dot"></span><span class="tip">${i + 1} ${m.name}</span></button>`).join('') +
-        `<button class="mb fs tw" data-a="fs" aria-label="전체화면">${img('ic.fullscreen')}<span class="tip">F 전체화면</span></button>`,
+      MENU.map((m, i) => `<button class="mb tw" data-tab="${m.tab}" aria-label="${m.name}">${img(m.icon)}<span class="menu-label">${m.name}</span><span class="dot"></span><span class="tip">${i + 1} ${m.name}</span></button>`).join('') +
+        `<button class="mb fs tw" data-a="fs" aria-label="전체보기">${img('ic.fullscreen')}<span class="menu-label">전체보기</span><span class="tip">F 전체보기</span></button>`,
     );
     this.panel = el('div', 'panel', `<div class="body"></div>`);
     this.body = $(this.panel, '.body')!;
@@ -122,9 +121,7 @@ export class OfficeHud {
 
   /** 폰 세로면 메뉴 원을 HUD 아래 한 줄로 */
   place(): void {
-    const port = document.getElementById('ui')!.classList.contains('port');
-    if (port && this.menu.parentElement !== this.hud) this.hud.appendChild(this.menu);
-    if (!port && this.menu.parentElement !== this.root) this.root.insertBefore(this.menu, this.panel);
+    if (this.menu.parentElement !== this.hud) this.hud.appendChild(this.menu);
     bumpHudVersion();
   }
   /** 패널 위치: HUD 실측 높이 아래 */
@@ -167,11 +164,11 @@ export class OfficeHud {
   }
   setFullscreen(on: boolean): void {
     const b = $(this.menu, '[data-a="fs"]');
-    if (b) b.innerHTML = `${img(on ? 'ic.fullscreenExit' : 'ic.fullscreen')}<span class="tip">F 전체화면</span>`;
+    if (b) b.innerHTML = `${img(on ? 'ic.fullscreenExit' : 'ic.fullscreen')}<span class="menu-label">전체보기</span><span class="tip">F 전체보기</span>`;
   }
   renderDistrict(): void {
     const d = DISTRICT_BY[S.district];
-    this.dist.innerHTML = `${img('ic.pin')}<span>${d.name}<small>${modLine(d.mod)}</small></span>`;
+    this.dist.innerHTML = `${img('ic.pin')}<span>${d.name}</span>`;
     this.fitBottom();
   }
 
@@ -195,6 +192,7 @@ export class OfficeHud {
       return had;
     };
     set('lv', String(S.lv));
+    set('users', fmt(S.xp + Array.from({ length: S.lv - 1 }, (_, i) => xpNeed(i + 1)).reduce((a, b) => a + b, 0)));
     const need = xpNeed(S.lv);
     const xf = barX(S.xp / need);
     if (this.last.xpfill !== xf) {
@@ -266,7 +264,7 @@ export class LunchHud {
           <div class="pend" data-v="pend" data-hud="hud.pending" style="display:none">${img('ic.pending')}<span data-v="pendt">결제 대기</span></div>
           <div class="sp"></div><div class="brk"></div>
           <div class="dname" data-v="dname"></div>
-          <button class="mb fs tw lfs" data-a="fs" aria-label="전체화면">${img('ic.fullscreen')}</button>
+          <button class="mb fs tw lfs" data-a="fs" aria-label="전체보기">${img('ic.fullscreen')}</button>
           <div class="portrait lportrait portP" data-v="portP"></div>
         </div>
         <div class="bossbar" data-v="boss"><div class="bn">${img('ic.best')}${TARGET_BY.boss ? TARGET_BY.boss.name : ''}<span data-v="bosspct"></span></div><div class="bb"><i class="gh" data-v="bossgh"></i><i class="fl" data-v="bossfl"></i></div></div>

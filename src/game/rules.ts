@@ -153,7 +153,7 @@ export function pay(c: Cost): void {
 export function lackOf(c: Cost): string {
   const lr = c.rev > S.revenue;
   const lt = c.tech > S.tech;
-  return lr && lt ? '매출·기술력' : lr ? '매출' : lt ? '기술력' : '';
+  return lr && lt ? '자본·기술력' : lr ? '자본' : lt ? '기술력' : '';
 }
 
 /* ── 트리 ──────────────────────────────────────── */

@@ -3,7 +3,7 @@ import { bindAdminEntry } from './admin';
 import { STRATEGIES } from '../game/strategy';
 /**
  * 사무실 패널(DOM): 직원 선택 · 도감(+거래처 관리) · 아이템 · 스킬(기본 역량 + 스킬판 3×3 십자) · 설정.
- * 성장 트리는 Pixi(TreeView) 가 그리고 여기서는 머리 막대만 얹는다.
+ * 스킬는 Pixi(TreeView) 가 그리고 여기서는 머리 막대만 얹는다.
  * 조작: 한 번 탭 = 설명 바 / 두 번 탭 = 구매(못 사면 오류음 + 흔들림).
  * 카드 테두리 = 효과 종류 색 + 칩 글자(설계서 6장). 살 수 있음은 초록 꼬리표 + 바탕색(테두리는 쓰지 않음).
  */
@@ -65,7 +65,7 @@ export class Panels {
   private reps(): void {
     this.body.innerHTML = '<h3>경영 방향<small>사무실에서 무료 변경 · 이번 영업의 중점을 선택하세요</small></h3><div class="strategy-grid">' +
       STRATEGIES.map(s=>`<button class="strategy-card ${S.strategy===s.id?'on':''}" data-strategy="${s.id}" aria-pressed="${S.strategy===s.id}">${img(s.icon)}<b>${s.name}</b></button>`).join('') +
-      `<p class="strategy-detail">${(STRATEGIES.find(s=>s.id===S.strategy)||STRATEGIES[0]).desc}</p></div><h3>인재 고용<small>고용한 인재의 버프는 모두 상시 적용됩니다</small></h3><div class="cards">` + CHARS.map(c=>{
+      `<p class="strategy-detail">${(STRATEGIES.find(s=>s.id===S.strategy)||STRATEGIES[0]).desc}</p></div><h3>인재영입<small>고용한 인재의 버프는 모두 상시 적용됩니다</small></h3><div class="cards">` + CHARS.map(c=>{
         const has=!!S.reps[c.id], can=repUnlocked(c.id), node=UNLOCK_NODE[c.id];
         return `<div class="cd ${has?'on':can?'ok':'lock'} ${kcls(c.kind)}" data-c="${c.id}"><div class="art"><div class="portrait" style="width:84px;height:84px">${img(`c.${c.id}@idle`,'')}</div></div><div class="nm">${c.name}</div><div class="ds">${c.sk}</div><div class="cost">${has?'상시 버프 적용 중':can?'두 번 누르면 고용':`먼저: ${node?.name||''}`}</div></div>`;
       }).join('')+'</div>';
@@ -83,7 +83,7 @@ export class Panels {
   private dex(): void {
     const found = TARGETS.filter((t) => S.counts[t.id]).length;
     this.body.innerHTML =
-      `<h3>도감 ${found} / ${TARGETS.length}<small>계약 10·100·1,000·1만·10만 건마다 별</small></h3><div class="cards">` +
+      `<h3>기업도감 ${found} / ${TARGETS.length}<small>계약 10·100·1,000·1만·10만 건마다 별</small></h3><div class="cards">` +
       TARGETS.map((t) => this.dexCard(t)).join('') +
       '</div>';
     for (const e of $$(this.body, '.cd[data-t]')) {
@@ -119,7 +119,7 @@ export class Panels {
     const nm = seen ? t.name : un ? '???' : t.name;
     const art = seen || !un ? img(`t.${t.id}@idle`, '', !seen ? 'style="filter:brightness(0) opacity(.25)"' : '') : img(`t.${t.id}@idle`, '', 'style="filter:brightness(0) opacity(.25)"');
     /* 도감 카드 = 이 거래처에서 번 누적 매출(거래액이 아니라) */
-    const ds = !un ? `성장 트리: ${node ? node.name : ''}` : seen ? `${t.sizeLabel} · 계약 ${fmt(n)}건<br>누적 매출 ${won(S.revBy[t.id] || 0)}` : '';
+    const ds = !un ? `스킬: ${node ? node.name : ''}` : seen ? `${t.sizeLabel} · 계약 ${fmt(n)}건<br>누적 매출 ${won(S.revBy[t.id] || 0)}` : '';
     const vc = keyChip('mastery');
     const mast = !un ? '' : !seen ? `<div class="cost">${img('ic.lock')}</div>` : !open ? `<div class="cost">${img('ic.lock')} Lv.${t.masteryLv} 관리 열림</div>` : max ? `<div class="cost">${vc}<span style="color:var(--purple)">관리 MAX</span></div>` : `<div class="bar"><i style="width:${st * 10}%"></i></div><div class="cost">${vc}관리 ${st}/10 · ${costTxt(masteryCost(t))}</div>`;
     return `<div class="cd ${cls}" data-t="${t.id}"><span class="badge l ${side}">${sideLab}</span>${can ? `<span class="okTag">올리기</span>` : ''}<div class="art">${art}</div><div class="nm">${nm}</div><div class="stars">${[0, 1, 2, 3, 4].map((i) => img(i < stars ? 'ic.star' : 'ic.starEmpty')).join('')}</div><div class="ds">${ds}</div>${mast}</div>`;
@@ -130,7 +130,7 @@ export class Panels {
     const node = UNLOCK_NODE[t.id];
     const beh = t.desc;
     if (!un) {
-      this.sheet.show(`t.${t.id}@idle`, t.name, beh, { state: 'lock', lockText: `성장 트리: ${node ? node.name : ''}` });
+      this.sheet.show(`t.${t.id}@idle`, t.name, beh, { state: 'lock', lockText: `스킬: ${node ? node.name : ''}` });
       return;
     }
     const title = `${t.name} 관리 ${st}/10`;
@@ -146,7 +146,7 @@ export class Panels {
   private items(): void {
     const n = Object.keys(S.items).length;
     this.body.innerHTML =
-      `<h3>지역 유물 ${n} / ${ITEMS.length}<small>해당 지역에서만 발견 · 보유 효과는 전 지역 적용 · 중복은 기술력</small></h3><div class="cards">` +
+      `<h3>유물아이템 ${n} / ${ITEMS.length}<small>해당 지역에서만 발견 · 보유 효과는 전 지역 적용 · 중복은 기술력</small></h3><div class="cards">` +
       ITEMS.map((it) => {
         const lv = S.items[it.id] || 0;
         const can = canBuyItem(it.id);
@@ -204,7 +204,7 @@ export class Panels {
     const cP = keyChip('power');
     const cR = keyChip('radius');
     this.body.innerHTML =
-      `<h3>기본 역량<small>매출로 강화</small></h3><div class="basics">
+      `<h3>역량교육<small>자본으로 강화</small></h3><div class="basics">
         <div class="cd ${!bpUn ? 'lock' : bpOk ? 'ok' : ''} ${kcls('power')}" data-b="power">${bpOk ? '<span class="okTag">올리기</span>' : ''}<div class="art">${img('ic.basic_power', '')}</div><div><div class="nm">${cP}영업기술 Lv ${S.base.power}</div><div class="ds">${nb(bpUn ? `초당 설득 ${fmt(P)} · 레벨당 ×${F.BASIC.power.mult}` : `초당 설득 ${fmt(P)}`)}</div>${bpUn ? `<div class="cost">${costTxt({ rev: bp, tech: 0 })}</div>` : lockLine('power')}</div></div>
         <div class="cd ${!brUn ? 'lock' : brMax ? 'max' : brOk ? 'ok' : ''} ${kcls('radius')}" data-b="radius">${brOk ? '<span class="okTag">올리기</span>' : ''}<div class="art">${img('ic.basic_radius', '')}</div><div><div class="nm">${cR}제품기술 Lv ${S.base.radius}</div><div class="ds">${nb(brUn ? `반지름 ${Math.round(R)} · 레벨당 ×${F.BASIC.radius.mult} (최대 ${F.BASIC.radius.max})` : `반지름 ${Math.round(R)}`)}</div>${!brUn ? lockLine('radius') : `<div class="cost">${brMax ? 'MAX' : costTxt({ rev: br, tech: 0 })}</div>`}</div></div>
       </div>
@@ -272,7 +272,7 @@ export class Panels {
       e.addEventListener('pointerdown', () => {
         const id = e.dataset.pw as SkillId;
         sfx('ui_tap');
-        this.sheet.show(`ic.${SKILLS[id].icon}`, SKILLS[id].name, SKILLS[id].d, { state: 'lock', lockText: `성장 트리: ${SKILLS[id].unlockName}` });
+        this.sheet.show(`ic.${SKILLS[id].icon}`, SKILLS[id].name, SKILLS[id].d, { state: 'lock', lockText: `스킬: ${SKILLS[id].unlockName}` });
       });
     }
   }
@@ -281,7 +281,7 @@ export class Panels {
     const un = skillUnlocked(id);
     const got = p.sk.filter((_k, i) => skLv(id, i) > 0).length;
     if (!un)
-      return `<div class="pw lockd" data-pw="${id}"><h4>${img(`ic.${p.icon}`)}${p.name}<small>${img('ic.lock')} 성장 트리: ${p.unlockName}</small></h4></div>`;
+      return `<div class="pw lockd" data-pw="${id}"><h4>${img(`ic.${p.icon}`)}${p.name}<small>${img('ic.lock')} 스킬: ${p.unlockName}</small></h4></div>`;
     return (
       `<div class="pw" data-pw="${id}"><h4>${img(`ic.${p.icon}`)}${p.name}<small>스킬 ${got}/5 · 재사용 ${skCooldown(id).toFixed(1)}초</small></h4><p>${p.d}</p><div class="sktree">` +
       p.sk
@@ -316,8 +316,8 @@ export class Panels {
       ['누적 기술력', fmt(S.techTotal)],
       ['누적 식대 거래액', won(S.gmv)],
       /* 계약 수 = 고객사 + 제휴점이라 한 줄로 */
-      ['계약', `고객사 ${fmt(S.netC)}곳 · 제휴점 ${fmt(S.netR)}곳`],
-      ['성장 트리', `${treeN} / ${TREE_COUNT}칸`],
+      ['계약', `고객사 ${fmt(S.netC)} · 제휴점 ${fmt(S.netR)}`],
+      ['스킬', `${treeN} / ${TREE_COUNT}`],
       ['스킬 단계 합', `${skSum}`],
       ['영업력 · 기술력', `${st.sales}/${STAT_MAX.sales} · ${st.tech}/${STAT_MAX.tech}`],
       ['플레이 시간', fmtTime(S.play)],
@@ -327,6 +327,7 @@ export class Panels {
     const q = S.settings.quality;
     this.body.innerHTML = `
       <h3>${img('ic.record')} 기록</h3><div class="stats">${rows.map(([a, b]) => `<div class="stat"><span>${a}</span><b>${b}</b></div>`).join('')}</div>
+      <h3>사용자 성장별 기술 해금<small>레벨을 올리면 기업도감에서 거래처 관리가 열립니다</small></h3><div class="unlock-list">${[...TARGETS].sort((a,b)=>a.masteryLv-b.masteryLv).map(t=>`<div class="unlock-row ${S.lv>=t.masteryLv?'unlocked':''}"><b>Lv.${t.masteryLv}</b><span>${t.name} 관리</span><small>${S.lv>=t.masteryLv?'해금':'미해금'}</small></div>`).join('')}</div>
       <h3>${img('ic.sound')} 소리</h3><div class="sets">
         <div class="ln"><span>전체 음량</span><input type="range" min="0" max="100" value="${v('master')}" data-vol="master"><b data-vv="master">${v('master')}</b></div>
         <div class="ln"><span>배경음</span><input type="range" min="0" max="100" value="${v('music')}" data-vol="music"><b data-vv="music">${v('music')}</b></div>
@@ -345,9 +346,9 @@ export class Panels {
         <div class="ln"><button class="btn light tw" data-a="export">${img('ic.save')}내보내기</button><button class="btn light tw" data-a="import">${img('ic.load')}가져오기</button><button class="btn red tw" data-a="reset" style="margin-left:auto">${img('ic.reset')}초기화</button></div>
         <textarea class="code" data-v="code" placeholder="저장 코드 붙여넣기"></textarea>
       </div>
-      <h3>${img('ic.help')} ${ONBOARDING.title}</h3><p class="guide-intro">${ONBOARDING.intro}</p><div class="howto">
+      <h3>${img('ic.help')} ${ONBOARDING.title}</h3><div class="howto">
         ${ONBOARDING.steps.map(([title,body],i)=>`<div class="step"><div class="no">${i+1}</div><p><b>${title}</b><br>${body}</p></div>`).join('')}
-      </div><h3>능력치 이해하기</h3><div class="guide-glossary">${ONBOARDING.glossary.map(([title,body])=>`<details><summary>${title}</summary><p>${body}</p></details>`).join('')}</div><p class="guide-note">${ONBOARDING.economy}</p>
+      </div>
       <p data-admin-entry tabindex="0" style="text-align:center;font-size:12px;color:#a08a6a;margin-top:12px">식권대장 타이쿤 v${VERSION_LABEL}</p>`;
     bindAdminEntry(this.body, () => { this.render(); this.hooks.refresh(); });
     for (const r of $$<HTMLInputElement>(this.body, 'input[data-vol]')) {

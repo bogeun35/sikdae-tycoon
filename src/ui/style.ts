@@ -537,6 +537,47 @@ body.touching .mb .tip { display:none; }
 .strategy-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:22px}.strategy-card{padding:14px;background:#fff8ec;border:2px solid #dbc9a7;border-radius:14px;display:grid;gap:6px;text-align:left;cursor:pointer}.strategy-card.on{border-color:#36967c;background:#ddf2e7}.strategy-card span{font-size:12px;line-height:1.4}.strategy-card .ic{width:26px;height:26px}
 .strategy-grid{grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}.strategy-card{padding:10px 5px;text-align:center;justify-items:center;font-size:12px;word-break:keep-all}.strategy-detail{grid-column:1/-1;background:#e7f2e9;border-radius:10px;padding:12px;margin:4px 0;color:#245a45;word-break:keep-all;font-size:14px}.strategy-card .ic{width:24px;height:24px}
 .guide-intro,.guide-note{font-size:14px;line-height:1.65;word-break:keep-all}.guide-note{color:var(--brown);padding:12px;background:#fff0d8;border-radius:12px}.guide-glossary details{margin:7px 0;padding:12px;background:#fffaf0;border-radius:10px;font-size:14px}.guide-glossary summary{cursor:pointer;font-weight:bold}.guide-glossary p{line-height:1.6;word-break:keep-all;margin:8px 0 0}.howto p{line-height:1.6;word-break:keep-all}
+
+/* v1.5.3: consistent header rows and named navigation on every screen size. */
+#ui #office .hud {left:10px;right:10px;gap:8px;align-items:stretch;}
+#ui #office .hud .row {flex-wrap:nowrap;gap:8px;}
+#ui #office .company-row {display:grid;grid-template-columns:1.35fr 1fr 1fr;}
+#office .users,#office .company-row .chip {min-width:0;position:relative;display:flex;align-items:center;justify-content:center;gap:6px;padding:7px 9px;background:var(--cream);border:2px solid white;border-radius:14px;box-shadow:0 2px 0 var(--brown-dark);font-size:14px;white-space:nowrap;overflow:hidden;}
+#office .company-row b {font-size:18px;font-weight:normal;}
+#office .user-lv {font-size:10px;color:var(--brown);}
+#office .user-progress {position:absolute;height:3px;bottom:0;left:0;right:0;overflow:hidden;background:#eadfc6;}
+#office .user-progress i {position:absolute;inset:0;background:#5cb85c;}
+#ui #office .finance-row .cur {padding:4px 10px;gap:5px;min-width:0;}
+#ui #office .finance-row .cur b {font-size:22px;}
+#ui #office .finance-row .cur .ic {width:20px;height:20px;}
+#ui #office .finance-row .cur.gmv {margin-left:auto;padding:4px 8px;border-radius:10px;}
+#ui #office .finance-row .cur.gmv b {font-size:13px;}
+#ui .cur-label {font-size:12px;white-space:nowrap;}
+#ui #office .menu {position:static;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));width:100%;gap:7px;margin:2px 0 4px;}
+#ui #office .menu .mb {width:100%;height:54px;border-radius:13px;display:flex;flex-direction:column;justify-content:center;gap:3px;border-width:2px;}
+#ui #office .menu .mb .ic {width:23px;height:23px;}
+#ui #office .menu-label {display:block;font-size:12px;white-space:nowrap;line-height:1.2;}
+#ui #office .menu .tip {display:none;}
+#ui #office .powers,#ui #office .howto,#ui #office .stats {grid-template-columns:1fr;}
+#ui.land #office .panel:not(.tree) .body {max-width:980px;margin:0 auto;padding-left:20px;padding-right:20px;}
+#ui #office .basics {grid-template-columns:repeat(2,minmax(0,1fr));}
+#ui #office .pw {min-width:0;}
+.unlock-list {margin:0 0 18px;padding:4px 14px;background:var(--paper);border:2px solid white;border-radius:14px;}
+.unlock-row {display:grid;grid-template-columns:60px 1fr auto;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px;}
+.unlock-row:last-child {border-bottom:0;}.unlock-row small {color:var(--brown);}.unlock-row.unlocked small {color:#27835b;}
+#ui.port #office .hud {left:8px;right:8px;gap:7px;}
+#ui.port #office .company-row {grid-template-columns:1.3fr 1fr 1fr;}
+#ui.port #office .company-row > * {padding:7px 4px;gap:4px;font-size:12px;}
+#ui.port #office .company-row b {font-size:15px;}
+#ui.port #office .user-lv {font-size:9px;}
+#ui.port #office .finance-row .cur {padding:4px 6px;gap:3px;}
+#ui.port #office .finance-row .cur .ic {display:none;}
+#ui.port #office .finance-row .cur b {font-size:20px;}
+#ui.port #office .finance-row .cur.gmv b {font-size:12px;}
+#ui.port #office .menu {gap:4px;}
+#ui.port #office .menu-label {font-size:11px;letter-spacing:-.5px;}
+#ui.short #office .menu .mb {height:38px;flex-direction:row;}
+#ui.short #office .menu .mb .ic {width:18px;height:18px;}
 ${kindCss()}  
 `;
 

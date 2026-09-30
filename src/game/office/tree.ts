@@ -149,7 +149,7 @@ function setRing(sp: Sprite, kind: KindId, S: number, res: number): void {
   sp.position.set(off[0], off[1]);
 }
 /** 이동·줌 위치(메모리에만). user = 사용자가 직접 옮겼는지(아니면 패널 크기가 바뀔 때 다시 가운데로) */
-const memo = { x: 0, y: 0, z: 1, set: false, user: false };
+const memo = { x: 0, y: 0, z: 0.74, set: false, user: false };
 
 let bgTex: Texture | null = null;
 function bgTexture(): Texture {
@@ -302,7 +302,7 @@ export class TreeView {
   }
   center(): void {
     const c = TREE_BY[TREE_CENTER];
-    memo.z = 1;
+    memo.z = 0.74;
     memo.user = false;
     this.applyZoom();
     const s = this.ct.scale.x;

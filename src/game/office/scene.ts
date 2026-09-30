@@ -194,7 +194,7 @@ export class OfficeScene {
       `<div class="th ${cls}">${img(icon)}<span>${name}&nbsp;${v}/${mx}</span><div class="thb"><i style="width:${Math.min(100, (v / mx) * 100)}%;background:${col}"></i></div></div>`;
     const center = this.hud.treeHead.querySelector<HTMLButtonElement>('[data-a="center"]');
     this.hud.treeHead.innerHTML =
-      bar('l', 'ic.revenue', '영업력', st.sales, STAT_MAX.sales, 'linear-gradient(90deg,#ffb09a,#ff7b5e)') +
+      bar('l', 'ic.revenue', '자본 · 영업력', st.sales, STAT_MAX.sales, 'linear-gradient(90deg,#ffb09a,#ff7b5e)') +
       bar('r', 'ic.tech', '기술력', st.tech, STAT_MAX.tech, 'linear-gradient(90deg,#9fd3ff,#4aa3df)') +
       '';
     const button = center || document.createElement('button');

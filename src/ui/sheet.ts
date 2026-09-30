@@ -53,7 +53,7 @@ export class Sheet {
 export function costTxt(c: Cost): string {
   /* 아이콘과 숫자가 줄바꿈으로 갈라지지 않게 묶음 */
   const parts: string[] = [];
-  if (c.rev || !c.tech) parts.push(`<span class="nw">${img('ic.revenue')}${fmt(c.rev)}</span>`);
-  if (c.tech) parts.push(`<span class="nw">${img('ic.tech')}${fmt(c.tech)}</span>`);
+  if (c.rev || !c.tech) parts.push(`<span class="nw">${img('ic.revenue')}자본 ${fmt(c.rev)}</span>`);
+  if (c.tech) parts.push(`<span class="nw">${img('ic.tech')}기술력 ${fmt(c.tech)}</span>`);
   return parts.join(' ');
 }

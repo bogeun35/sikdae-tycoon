@@ -27,11 +27,11 @@ function openAdmin(refresh: () => void): void {
   <label for="admin-money">보유 매출 (원)</label><input id="admin-money" type="number" min="0" max="1000000000000000" value="${S.revenue}">
   <label for="admin-tech">보유 기술력</label><input id="admin-tech" type="number" min="0" max="1000000000000000" value="${S.tech}">
   <button data-admin="money">금액 적용</button>
-  <label for="admin-node">강제 강화할 성장 트리</label><select id="admin-node">${TREE.map(n=>`<option value="${n.id}">${n.name} (${S.tree[n.id]||0}/${n.max})</option>`).join('')}</select>
+  <label for="admin-node">강제 강화할 스킬</label><select id="admin-node">${TREE.map(n=>`<option value="${n.id}">${n.name} (${S.tree[n.id]||0}/${n.max})</option>`).join('')}</select>
   <button data-admin="node">선택한 기술 +1 (비용·선행 무시)</button>
   <button data-admin="base">기본 역량 각각 +1</button><button data-admin="skills">모든 스킬 해금·각각 +1</button>
   <label for="admin-district">테스트 지역</label><select id="admin-district">${DISTRICTS.map(d=>`<option value="${d.id}" ${S.district===d.id?'selected':''}>${d.name}</option>`).join('')}</select>
-  <button data-admin="district">지역 해금·이동</button><button data-admin="hire">모든 인재 고용</button>
+  <button data-admin="district">지역 해금·이동</button><button data-admin="hire">모든 인재영입</button>
   <hr style="margin-top:20px"><button data-admin="download">현재 저장 백업 파일</button><button data-admin="restore">테스트 이전으로 복원</button><button data-admin="close">닫기</button><p role="status" aria-live="polite"></p>`;
   document.body.appendChild(dialog); dialog.showModal();
   const status = dialog.querySelector<HTMLElement>('[role=status]')!;
