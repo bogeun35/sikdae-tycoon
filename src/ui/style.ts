@@ -593,6 +593,14 @@ body.touching .mb .tip { display:none; }
 #ui.port #office .finance-row .cur.gmv b {font-size:12px;}
 #ui #office .finance-row .cur.bump {animation:currencyGlow .25s ease;}
 @keyframes currencyGlow {50% {filter:brightness(1.14);}}
+
+/* v1.5.7: panel headings stay concise; effects and status use compact tags. */
+.ui-tag {display:inline-flex;align-items:center;gap:3px;padding:3px 7px;border-radius:8px;background:#eee4cd;color:var(--brown-dark);font-size:11px;line-height:1.2;white-space:nowrap;}
+.strategy-effects {grid-column:1/-1;display:flex;flex-wrap:wrap;gap:7px;margin:4px 0 0;}
+.effect-tag {display:inline-flex;align-items:center;gap:6px;background:var(--paper);padding:6px 9px;border:1px solid var(--line);border-radius:10px;}
+.effect-tag b {font-size:14px;font-weight:normal;}
+#ui .skill-info {background:none;border:0;padding:0;display:inline-flex;align-items:center;gap:6px;text-align:left;font-size:inherit;cursor:pointer;}
+.pw h4 small {display:flex;gap:4px;align-items:center;}
 ${kindCss()}  
 `;
 
