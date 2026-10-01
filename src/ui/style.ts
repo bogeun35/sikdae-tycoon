@@ -648,6 +648,37 @@ body.touching .mb .tip { display:none; }
 #ui.land #office .finance-row .cur.gmv b {font-size:19px;}
 #ui.land #office .menu-label {font-size:15px;}
 #ui.land #office .menu .mb .ic {width:30px;height:30px;}
+
+/* Shared visual language for the live sales HUD. */
+#ui #lunch .lhud {padding:6px 5px 8px;gap:6px;background:linear-gradient(180deg,rgba(15,28,65,.96),rgba(15,28,65,.82));color:#fff5df;border:0;border-radius:0;box-shadow:none;}
+#ui #lunch .lhud .r1 {display:flex;gap:4px;align-items:flex-start;}
+#ui #lunch .lhud .r1 .live-stat,#ui #lunch .lhud .r1 .cur {display:flex;flex:1 1 0;flex-direction:column;align-items:center;min-width:0;width:0;gap:3px;padding:0;border:0;border-radius:0;box-shadow:none;background:none;color:inherit;}
+#ui #lunch .live-stat span,#ui #lunch .cur-label {font-size:11px;opacity:.85;white-space:nowrap;}
+#ui #lunch .live-stat b,#ui #lunch .cur b {font-size:18px;line-height:1.2;letter-spacing:-.4px;font-weight:normal;color:inherit;}
+#ui #lunch .cur.rev b {color:#ffe399;}#ui #lunch .cur.tc b {color:#a9e7ff;}
+#ui #lunch .cur.gmv b {font-size:14px;}
+#ui #lunch .cur .ic {display:none;}
+#ui #lunch .lhud .cur .gain {position:static;background:none;box-shadow:none;padding:0;margin:0;color:#a4e9ae;font-size:10px;line-height:12px;}
+#ui #lunch .lhud .r2 {display:flex;flex-wrap:wrap;gap:5px;align-items:center;}
+#ui #lunch .lhud .timer,#ui #lunch .lhud .match,#ui #lunch .lhud .pend {background:none;border:0;box-shadow:none;border-radius:0;padding:2px 0;color:inherit;}
+#ui #lunch .lhud .timer {order:0;min-width:70px;font-size:20px;gap:3px;}
+#ui #lunch .lhud .timer .ic {width:18px;height:18px;}
+#ui #lunch .lhud .timer.low {color:#ff9999;background:none;}
+#ui #lunch .lhud .match {order:1;flex:1;gap:3px;font-size:12px;}
+#ui #lunch .lhud .match .ic {width:17px;height:17px;}
+#ui #lunch .lhud .match .mm {font-size:12px;min-width:0;color:#ffe399;}
+#ui #lunch .lhud .match .mb2 {display:none;}
+#ui #lunch .lhud .pend {font-size:11px;order:2;}
+#ui #lunch .lhud .brk,#ui #lunch .lhud .portP {display:none;}
+#ui.port #lunch .live-stat b,#ui.port #lunch .cur b {font-size:15px;}
+#ui.port #lunch .cur.gmv b {font-size:12px;}
+#ui.land #lunch .live-stat span,#ui.land #lunch .cur-label {font-size:16px;}
+#ui.land #lunch .live-stat b,#ui.land #lunch .cur b {font-size:25px;}
+#ui.land #lunch .cur.gmv b {font-size:19px;}
+#ui #lunch .lhud .r2 .sp {order:3;}
+#ui #lunch .lhud .r2 .dname {order:4;background:none;padding:0;}
+#ui #lunch .lhud .r2 .lfs {order:5;background:none;border:0;box-shadow:none;}
+#ui #lunch .portL {display:none;}
 ${kindCss()}  
 `;
 

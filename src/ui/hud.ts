@@ -59,9 +59,7 @@ function curPill(id: 'gmv' | 'revenue' | 'tech', gain = false): string {
   const lab = id === 'gmv' ? '누적 식대 거래액' : id === 'revenue' ? '자본' : '기술력';
   return `<div class="cur ${cls} pe" data-hud="hud.${id}" title="${lab}">${id === 'gmv' ? '' : img(ic)}<span class="cur-label">${id === 'gmv' ? '거래액' : lab}</span><b data-v="${id}">0</b>${gain ? `<span class="gain" data-g="${id}"></span>` : ''}</div>`;
 }
-function lvlPill(): string {
-  return `<div class="lvl pe clickable" data-hud="hud.level" data-a="level"><div class="n" data-v="lv">1</div><div class="xpbar"><i data-v="xpfill"></i><span data-v="xptxt">0 / 400</span></div></div>`;
-}
+
 
 export class OfficeHud {
   readonly root: HTMLElement;
@@ -257,9 +255,9 @@ export class LunchHud {
     const curRow = (g: boolean) => `${curPill('revenue', g)}${curPill('tech', g)}${curPill('gmv')}`;
     this.root.innerHTML = `
       <div class="lhud">
-        <div class="r1">${lvlPill()}${curRow(true)}<div class="sp"></div><div class="timer" data-v="timer">${img('ic.timer')}<span class="tts" data-v="tt"><canvas class="ttc"></canvas></span></div></div>
-        <div class="r2x">${curRow(true)}</div>
+        <div class="r1"><div class="live-stat" data-hud="hud.level"><span>사용자</span><b data-v="users">0</b></div><div class="live-stat" data-hud="hud.net"><span>고객사</span><b data-v="netc">0</b></div><div class="live-stat"><span>제휴점</span><b data-v="netr">0</b></div>${curRow(true)}</div>
         <div class="r2">
+          <div class="timer" data-v="timer">${img('ic.timer')}<span class="tts" data-v="tt"><canvas class="ttc"></canvas></span></div>
           <div class="match" data-v="match">${img('ic.corp')}<span data-v="mc">0</span> : ${img('ic.store')}<span data-v="mr">0</span><span class="mm" data-v="mm">밸런스계약 ×1.00</span><div class="mb2"><i data-v="mbar"></i></div></div>
           <div class="pend" data-v="pend" data-hud="hud.pending" style="display:none">${img('ic.pending')}<span data-v="pendt">결제 대기</span></div>
           <div class="sp"></div><div class="brk"></div>
@@ -331,11 +329,7 @@ export class LunchHud {
     const match = $(this.root, '[data-v="match"]');
     const pend = $(this.root, '[data-v="pend"]');
     if (!dn || !lbl || !r1 || !r2 || !match || !pend) return;
-    if (flat) {
-      const sp1 = $(r1, '.sp');
-      r1.insertBefore(match, sp1);
-      r1.insertBefore(pend, sp1);
-    } else if (match.parentElement !== r2) {
+    if (match.parentElement !== r2) {
       r2.insertBefore(pend, r2.firstChild);
       r2.insertBefore(match, pend);
     }
@@ -488,7 +482,7 @@ export class LunchHud {
     const domNow = this.domTick === 0 || this.domForce;
     this.domForce = false;
     /* 보이는 줄만(폰 세로 = 둘째 줄, 그 밖 = 첫 줄) — 숨은 줄 캔버스까지 매번 그리지 않게. 배치가 바뀌면 place() 가 last 를 비워 다시 씀 */
-    const row = this.modeNow === 'port' ? '.lhud .r2x ' : '.lhud .r1 ';
+    const row = '.lhud .r1 ';
     /* 캔버스 숫자 크기·색이 바뀌는 때 = 화면 배치(#ui 클래스·배율)가 바뀔 때. hudVersion 은 글자 길이만 바뀌어도 오르므로 쓰지 않음 */
     const ver = (document.getElementById('ui')?.className || '') + '|' + view.kd + '|' + (this.one('.lhud .r1')?.className || '');
     let widthMaybe = false;
@@ -512,6 +506,9 @@ export class LunchHud {
       else if (this.last[k] !== v) this.domForce = this.domForce || this.last[k] === undefined;
     };
     setDom('lv', String(S.lv));
+    setDom('users', fmtShort(userCount()));
+    setDom('netc', fmtShort(S.netC));
+    setDom('netr', fmtShort(S.netR));
     const need = xpNeed(S.lv);
     const xf = barX(S.xp / need);
     if (this.last.xpfill !== xf) {
@@ -519,14 +516,14 @@ export class LunchHud {
       for (const f of this.all('[data-v="xpfill"]')) f.style.transform = xf;
     }
     setDom('xptxt', `${Math.floor(S.xp / need * 100)}%`);
-    set('gmv', fmt(disp.gmv));
+    set('gmv', fmtShort(disp.gmv));
     /* 알약 튀기는 코인이 닿을 때만(bumpAnchor). 숫자가 따라 올라가는 0.1초마다 튀기면 애니메이션이 끊이지 않아 매 프레임 스타일 계산(설계서 7장 3) */
-    set('revenue', fmt(disp.revenue));
-    set('tech', fmt(disp.tech));
+    set('revenue', fmtShort(disp.revenue));
+    set('tech', fmtShort(disp.tech));
     const g = (k: 'gmv' | 'revenue' | 'tech') => {
       /* 이번 판 획득(+)도 누적 표시값과 같은 속도로 따라 올라가게: 누적이 아직 못 따라온 만큼 뺌(누적보다 커 보이지 않게) */
       const shownGain = Math.max(0, this.gain[k] - Math.max(0, S[k] - disp[k]));
-      const v = shownGain >= 1 ? '+' + fmt(shownGain) : '';
+      const v = shownGain >= 1 ? '+' + fmtShort(shownGain) : '';
       const old = this.last['g' + k];
       if (old === v) return;
       this.last['g' + k] = v;
@@ -761,3 +758,4 @@ void E;
 export function displayBusy(): boolean {
   return disp.gmv !== S.gmv || disp.revenue !== S.revenue || disp.tech !== S.tech;
 }
+
