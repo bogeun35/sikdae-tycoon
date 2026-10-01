@@ -490,7 +490,7 @@ export class TreeView {
     gsap.to(this.ct, {
       x: this.rect.x + this.rect.w / 2 - n.x * GAP * scale,
       y: this.rect.y + this.rect.h * 0.43 - n.y * GAP * scale,
-      duration: S.settings.reduceShake ? 0.2 : 0.55,
+      duration: S.settings.reduceShake ? 0.1 : 0.275,
       ease: 'power2.inOut',
       onUpdate: () => { memo.x = this.ct.x; memo.y = this.ct.y; requestRender(); },
     });

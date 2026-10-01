@@ -29,7 +29,7 @@ export class Sheet {
       const ok = payable(c);
       right = `<span class="pz ${ok ? 'ok' : 'no'}"><span class="grp">${costTxt(c)}</span><small class="hl">${ok ? `${img('ic.doubleTap')} ${o.okText || '두 번 누르면 구매!'}` : `${lackOf(c)} 부족`}</small>${own}</span>`;
     }
-    this.el.innerHTML = `<div class="sic">${iconHtml}</div><div class="t"><div class="nm">${name}${o.chips || ''}${o.sub ? `<small>${o.sub}</small>` : ''}</div><div class="ds">${desc}</div></div>${right}`;
+    this.el.innerHTML = `<div class="sic">${iconHtml}</div><div class="t"><div class="nm">${name}${o.sub ? `<small>${o.sub}</small>` : ''}</div><div class="ds">${o.chips || ''}<span class="effect-value">${desc}</span></div></div>${right}`;
     this.el.classList.add('show');
   }
   hide(): void {

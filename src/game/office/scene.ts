@@ -391,25 +391,25 @@ export class OfficeScene {
       const n = TREE.filter(n => nodeVisible(n) && canBuyNode(n)).sort((a, b) => nodeCost(a) - nodeCost(b))[0];
       if (!n) {
         if (TREE.every(n => tlv(n.id) >= n.max)) { this.setAuto(false); toast('스킬 업그레이드 완료', 'ic.check'); return; }
-        this.renderAuto(true); this.autoDelay = 0.8; return;
+        this.renderAuto(true); this.autoDelay = 0.4; return;
       }
       this.autoTarget = n; this.renderAuto();
       this.sheet.hide(); this.tree.select(null); this.tree.focusNode(n);
-      this.autoPhase = 'move'; this.autoDelay = 0.65; return;
+      this.autoPhase = 'move'; this.autoDelay = 0.325; return;
     }
     const n = this.autoTarget;
     if (!n || (this.autoPhase !== 'effect' && (!nodeVisible(n) || !canBuyNode(n)))) {
-      this.autoPhase = 'find'; this.autoDelay = 0.2; return;
+      this.autoPhase = 'find'; this.autoDelay = 0.1; return;
     }
     if (this.autoPhase === 'move') {
       this.tree.select(n.id); this.showNode(n); this.autoTap(n); sfx('ui_tap');
-      this.autoPhase = 'select'; this.autoDelay = 0.75; return;
+      this.autoPhase = 'select'; this.autoDelay = 0.375; return;
     }
     if (this.autoPhase === 'select') {
       // Use the same purchase, save, sound, unlock and animation path as manual clicks.
       this.autoTap(n);
-      if (this.buyNode(n)) { this.autoPhase = 'effect'; this.autoDelay = 1.4; }
-      else { this.autoPhase = 'find'; this.autoDelay = 0.2; }
+      if (this.buyNode(n)) { this.autoPhase = 'effect'; this.autoDelay = 0.7; }
+      else { this.autoPhase = 'find'; this.autoDelay = 0.1; }
       return;
     }
     this.autoPhase = 'find'; this.autoTarget = null;

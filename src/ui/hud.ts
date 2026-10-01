@@ -86,8 +86,8 @@ export class OfficeHud {
     this.hud = el(
       'div',
       'hud',
-      `<div class="row company-row"><div class="users pe clickable" data-hud="hud.level" data-a="level"><span>사용자</span><b data-v="users">0</b><span class="user-lv">Lv.<span data-v="lv">1</span></span><div class="user-progress"><i data-v="xpfill"></i></div></div><div class="chip net pe" data-hud="hud.net"><span>고객사</span><b data-v="netc">0</b></div><div class="chip net pe"><span>제휴점</span><b data-v="netr">0</b></div></div>
-       <div class="row finance-row">${curPill('revenue')}${curPill('tech')}${curPill('gmv')}</div>`,
+      `<div class="status-line"><div class="row company-row"><div class="users pe clickable" data-hud="hud.level" data-a="level"><span>사용자</span><b data-v="users">0</b><span class="user-lv">Lv.<span data-v="lv">1</span></span><div class="user-progress"><i data-v="xpfill"></i></div></div><div class="chip net pe" data-hud="hud.net"><span>고객사</span><b data-v="netc">0</b></div><div class="chip net pe"><span>제휴점</span><b data-v="netr">0</b></div></div>
+       <div class="row finance-row">${curPill('revenue')}${curPill('tech')}${curPill('gmv')}</div></div>`,
     );
     this.menu = el(
       'div',
@@ -192,7 +192,7 @@ export class OfficeHud {
       return had;
     };
     set('lv', String(S.lv));
-    set('users', fmt(S.xp + Array.from({ length: S.lv - 1 }, (_, i) => xpNeed(i + 1)).reduce((a, b) => a + b, 0)));
+    set('users', fmtShort(S.xp + Array.from({ length: S.lv - 1 }, (_, i) => xpNeed(i + 1)).reduce((a, b) => a + b, 0)));
     const need = xpNeed(S.lv);
     const xf = barX(S.xp / need);
     if (this.last.xpfill !== xf) {
@@ -205,8 +205,8 @@ export class OfficeHud {
     set('gmv', fmtShort(disp.gmv));
     if (set('revenue', fmtShort(disp.revenue))) bump(this.ref('.cur.rev'));
     if (set('tech', fmtShort(disp.tech))) bump(this.ref('.cur.tc'));
-    if (set('netc', fmt(S.netC))) bump(this.ref('.chip.net'));
-    set('netr', fmt(S.netR));
+    if (set('netc', fmtShort(S.netC))) bump(this.ref('.chip.net'));
+    set('netr', fmtShort(S.netR));
     set('hint', hintText());
   }
 }

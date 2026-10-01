@@ -613,6 +613,41 @@ body.touching .mb .tip { display:none; }
 #ui .auto-tap::before {content:'';position:absolute;inset:-6px;border:2px solid #ffe999;border-radius:50%;animation:autoRing .6s ease-out both;}
 @keyframes autoClick {0%{opacity:0;transform:translate(10px,10px) scale(1.15);}30%{opacity:1;transform:translate(0,0) scale(.9);}60%{opacity:1;transform:scale(1);}100%{opacity:0;}}
 @keyframes autoRing {0%{opacity:1;transform:scale(.3);}100%{opacity:0;transform:scale(1.8);}}
+
+
+/* v1.5.9: one unboxed status line and quiet navigation. */
+#ui #office .hud {padding:4px 0;gap:8px;border:0;border-radius:0;background:none;box-shadow:none;}
+#ui #office .status-line {display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-width:0;color:#fff5df;}
+#ui #office .hud .company-row,#ui #office .hud .finance-row {display:contents;}
+#ui #office .company-row .users,#ui #office .company-row .chip,#ui #office .finance-row .cur {display:flex;flex:1 1 0;flex-direction:column;align-items:center;justify-content:center;min-width:0;width:auto;height:43px;gap:3px;padding:0;border:0;border-radius:0;background:none;box-shadow:none;color:inherit;overflow:visible;white-space:nowrap;}
+#ui #office .company-row span,#ui #office .finance-row .cur-label {font-size:11px;line-height:1.1;opacity:.8;}
+#ui #office .company-row b,#ui #office .finance-row .cur b {font-size:18px;line-height:1.1;color:inherit;letter-spacing:-.4px;font-variant-numeric:tabular-nums;}
+#ui #office .finance-row .cur.rev b {color:#ffe399;}
+#ui #office .finance-row .cur.tc b {color:#a9e7ff;}
+#ui #office .finance-row .cur.gmv b {font-size:14px;opacity:.8;}
+#ui #office .company-row .user-lv,#ui #office .user-progress,#ui #office .finance-row .ic {display:none;}
+#ui #office .menu {gap:4px;margin:0;padding:2px 0 0;}
+#ui #office .menu .mb {height:54px;background:none;border:0;box-shadow:none;border-radius:0;color:#e4edff;opacity:.8;gap:4px;}
+#ui #office .menu .mb.on {background:none;box-shadow:inset 0 -3px #ffdc83;color:#ffdc83;opacity:1;}
+#ui #office .menu .mb:hover {opacity:1;}
+#ui #office .menu .mb .ic {width:24px;height:24px;}
+#ui #office .menu .dot {width:8px;height:8px;top:2px;right:4px;border-width:1px;}
+#ui #office .menu-label {font-size:11px;letter-spacing:-.3px;}
+#ui.port #office .status-line {gap:3px;}
+#ui.port #office .company-row b,#ui.port #office .finance-row .cur b {font-size:15px;}
+#ui.port #office .finance-row .cur.gmv b {font-size:12px;}
+#ui.short #office .menu .mb {height:34px;}
+#ui .sheet .ds {display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:5px;}
+#ui .sheet .ds .kc {margin:0;flex:none;}
+#ui .sheet .effect-value {font-size:17px;color:var(--brown-dark);}
+#ui .auto-tap {animation-duration:.325s;}
+#ui .auto-tap::before {animation-duration:.3s;}
+#ui #office .hud {background:linear-gradient(180deg,rgba(14,26,61,.7),rgba(14,26,61,0));text-shadow:0 1px 3px #152451;}
+#ui.land #office .company-row span,#ui.land #office .finance-row .cur-label {font-size:16px;}
+#ui.land #office .company-row b,#ui.land #office .finance-row .cur b {font-size:25px;}
+#ui.land #office .finance-row .cur.gmv b {font-size:19px;}
+#ui.land #office .menu-label {font-size:15px;}
+#ui.land #office .menu .mb .ic {width:30px;height:30px;}
 ${kindCss()}  
 `;
 
