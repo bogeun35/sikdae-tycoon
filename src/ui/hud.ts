@@ -4,7 +4,7 @@
  * 숫자는 표시값 += (실제 − 표시값) × min(1, dt × 7) 로 따라 올라가고, 오르면 알약이 1.14배 튄다.
  */
 import { CHAR_BY, DISTRICT_BY, SKILLS, SKILL_ORDER, TARGET_BY, type SkillId } from '../game/data';
-import { fmt } from '../game/format';
+import { fmt, fmtShort } from '../game/format';
 import { E, lvPowerMult, nextMasteryUnlock, skillUnlocked, STAT_MAX, xpNeed } from '../game/rules';
 import { S } from '../game/state';
 import type { HudId } from '../game/fx/top';
@@ -202,9 +202,9 @@ export class OfficeHud {
     }
     set('xptxt', `${fmt(S.xp)} / ${fmt(need)}`);
     /* 거래액 칩은 값이 올라도 튀지 않음(눈길은 매출·기술력으로) */
-    set('gmv', fmt(disp.gmv));
-    if (set('revenue', fmt(disp.revenue))) bump(this.ref('.cur.rev'));
-    if (set('tech', fmt(disp.tech))) bump(this.ref('.cur.tc'));
+    set('gmv', fmtShort(disp.gmv));
+    if (set('revenue', fmtShort(disp.revenue))) bump(this.ref('.cur.rev'));
+    if (set('tech', fmtShort(disp.tech))) bump(this.ref('.cur.tc'));
     if (set('netc', fmt(S.netC))) bump(this.ref('.chip.net'));
     set('netr', fmt(S.netR));
     set('hint', hintText());

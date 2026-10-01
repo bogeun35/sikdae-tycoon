@@ -578,6 +578,21 @@ body.touching .mb .tip { display:none; }
 #ui.port #office .menu-label {font-size:11px;letter-spacing:-.5px;}
 #ui.short #office .menu .mb {height:38px;flex-direction:row;}
 #ui.short #office .menu .mb .ic {width:18px;height:18px;}
+
+/* v1.5.6: reserve currency space before balances grow. */
+#ui #office .hud .finance-row {display:grid;grid-template-columns:minmax(0,2fr) minmax(0,2fr) minmax(0,1.1fr);align-items:center;}
+#ui #office .finance-row .cur {width:100%;height:40px;justify-content:center;gap:6px;border-radius:14px;overflow:hidden;}
+#ui #office .finance-row .cur .ic {display:none;}
+#ui #office .finance-row .cur b {font-variant-numeric:tabular-nums;font-size:21px;white-space:nowrap;}
+#ui #office .finance-row .cur.gmv {margin-left:0;height:34px;display:flex;flex-direction:column;justify-content:center;gap:0;padding:2px 5px;}
+#ui #office .finance-row .cur.gmv .cur-label {font-size:10px;line-height:12px;}
+#ui #office .finance-row .cur.gmv b {font-size:13px;line-height:14px;}
+#ui.port #office .finance-row .cur {gap:4px;}
+#ui.port #office .finance-row .cur-label {font-size:11px;}
+#ui.port #office .finance-row .cur b {font-size:19px;}
+#ui.port #office .finance-row .cur.gmv b {font-size:12px;}
+#ui #office .finance-row .cur.bump {animation:currencyGlow .25s ease;}
+@keyframes currencyGlow {50% {filter:brightness(1.14);}}
 ${kindCss()}  
 `;
 
