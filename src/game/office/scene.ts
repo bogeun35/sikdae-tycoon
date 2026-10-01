@@ -6,7 +6,7 @@ import { CHAR_BY, DISTRICT_BY, SKILLS, TARGET_BY, TREE, TREE_BY, type DistrictId
 import { music, sfx } from '../deps';
 import { fmt, fmtVal } from '../format';
 import {
-  E, anyNodeBuyable, anySkBuyable, canBuyItem, canBuyMastery, canBuyNode, nodeCostObj, nodeLinked, nodeReqName, nodeReqOk, owns, refreshEff, repUnlocked, statLevels, STAT_MAX, tlv,
+  E, anyNodeBuyable, anySkBuyable, canBuyItem, canBuyMastery, canBuyNode, nodeCost, nodeCostObj, nodeLinked, nodeReqName, nodeReqOk, nodeVisible, owns, refreshEff, repUnlocked, statLevels, STAT_MAX, tlv,
 } from '../rules';
 import { S, saveGame } from '../state';
 import { buyNode as shopBuyNode } from '../shop';
@@ -45,6 +45,12 @@ export class OfficeScene {
   private offLayout: (() => void) | null = null;
   private hudRO: ResizeObserver | null = null;
   private active = false;
+  private autoOn = false;
+  private autoPhase: 'find' | 'move' | 'select' | 'effect' = 'find';
+  private autoDelay = 0;
+  private autoTarget: TreeNode | null = null;
+  private autoCuts = 0;
+  private autoCursor: HTMLElement | null = null;
 
   constructor(root: HTMLElement, readonly hooks: OfficeHooks) {
     this.hud = new OfficeHud(root);
@@ -63,6 +69,7 @@ export class OfficeScene {
     this.hud.menu.querySelector('[data-a="fs"]')?.addEventListener('click', () => hooks.toggleFullscreen());
     this.hud.cfg.addEventListener('click', () => this.toggleTab('settings'));
     this.hud.dist.addEventListener('click', () => {
+      this.setAuto(false);
       sfx('ui_open');
       districtModal((id: DistrictId) => {
         S.district = id;
@@ -73,11 +80,13 @@ export class OfficeScene {
     });
     this.hud.go.addEventListener('click', () => this.hooks.goLunch());
     this.hud.onLevelTap = () => {
+      this.setAuto(false);
       sfx('ui_tap');
       const li = levelInfo();
       this.sheet.show('ic.level', li.title, li.desc, { extra: `<span class="pz ok">${img('ic.xp')}<small class="hl">사용자수 ${fmt(S.xp)}</small></span>` });
       if (this.tab === null) this.openTab('tree');
     };
+    document.addEventListener('visibilitychange', () => { if (document.hidden) this.setAuto(false); });
   }
 
   enter(): void {
@@ -86,7 +95,7 @@ export class OfficeScene {
     const anim = budget().officeAnim;
     this.bg = new OfficeBg(anim);
     L.bg.addChild(this.bg.root);
-    this.tree = new TreeView({ tap: (n) => this.tapNode(n) });
+    this.tree = new TreeView({ tap: (n) => this.tapNode(n), interact: () => this.setAuto(false) });
     this.tree.setAnimated(anim);
     /* 출발 버튼 빛 고리를 처음부터 다시(가벼운 화질은 몇 번만 움직이고 멈춤) */
     this.hud.go.classList.toggle('re');
@@ -112,6 +121,7 @@ export class OfficeScene {
     music('office');
   }
   exit(): void {
+    this.setAuto(false);
     this.active = false;
     this.hud.root.classList.remove('on');
     this.offLayout?.();
@@ -151,6 +161,7 @@ export class OfficeScene {
     }
   }
   openTab(t: string | null, silent = false): void {
+    if (t !== 'tree') this.setAuto(false);
     this.tab = t;
     this.panels.tab = t === 'tree' ? null : t;
     this.hud.setTab(t);
@@ -182,17 +193,25 @@ export class OfficeScene {
     const bar = (cls: string, icon: string, name: string, v: number, mx: number, col: string) =>
       `<div class="th ${cls}">${img(icon)}<span>${name}&nbsp;${v}/${mx}</span><div class="thb"><i style="width:${Math.min(100, (v / mx) * 100)}%;background:${col}"></i></div></div>`;
     const center = this.hud.treeHead.querySelector<HTMLButtonElement>('[data-a="center"]');
+    const auto = this.hud.treeHead.querySelector<HTMLButtonElement>('[data-a="auto-upgrade"]');
     this.hud.treeHead.innerHTML =
-      bar('l', 'ic.revenue', '자본 · 영업력', st.sales, STAT_MAX.sales, 'linear-gradient(90deg,#ffb09a,#ff7b5e)') +
+      bar('l', 'ic.revenue', '영업력', st.sales, STAT_MAX.sales, 'linear-gradient(90deg,#ffb09a,#ff7b5e)') +
       bar('r', 'ic.tech', '기술력', st.tech, STAT_MAX.tech, 'linear-gradient(90deg,#9fd3ff,#4aa3df)') +
       '';
     const button = center || document.createElement('button');
     if (!center) {
       button.className = 'tcenter pe'; button.dataset.a = 'center'; button.type = 'button';
       button.innerHTML = `${img('ic.back')}가운데로`;
-      button.addEventListener('click', () => { sfx('ui_tap'); this.tree?.center(); });
+      button.addEventListener('click', () => { this.setAuto(false); sfx('ui_tap'); this.tree?.center(); });
     }
     this.hud.treeHead.appendChild(button);
+    const autoButton = auto || document.createElement('button');
+    if (!auto) {
+      autoButton.className = 'auto-upgrade pe'; autoButton.dataset.a = 'auto-upgrade'; autoButton.type = 'button';
+      autoButton.addEventListener('click', () => { sfx('ui_tap'); this.setAuto(!this.autoOn); });
+    }
+    this.hud.treeHead.appendChild(autoButton);
+    this.renderAuto();
 
   }
 
@@ -225,6 +244,7 @@ export class OfficeScene {
     this.sheet.bind(() => this.showNode(n));
   }
   private tapNode(n: TreeNode): void {
+    this.setAuto(false);
     tapKey(
       'node:' + n.id,
       () => canBuyNode(n),
@@ -255,9 +275,11 @@ export class OfficeScene {
     const tg = String(n.tg);
     if (n.ef === 'district') {
       const d = DISTRICT_BY[tg];
+      this.autoCuts++;
+      const done = () => { this.autoCuts = Math.max(0, this.autoCuts - 1); this.hud.dist.classList.add('glow'); };
       void rasterKey(`m.${d.id}.ground@land`, 0.4).then((tex) => {
-        districtCut(tex, `${d.name} 오픈!`, d.note, () => this.hud.dist.classList.add('glow'));
-      }).catch(() => districtCut(null, `${d.name} 오픈!`, d.note));
+        districtCut(tex, `${d.name} 오픈!`, d.note, done);
+      }).catch(() => districtCut(null, `${d.name} 오픈!`, d.note, done));
       sfx('district_open');
       setTimeout(() => this.hud.dist.classList.remove('glow'), 6000);
     } else if (n.ef === 'tgt') {
@@ -297,6 +319,7 @@ export class OfficeScene {
 
   key(k: string): boolean {
     if (k === 'Escape') {
+      if (this.autoOn) { this.setAuto(false); return true; }
       if (this.sheet.shown) {
         this.sheet.hide();
         this.tree?.select(null);
@@ -327,11 +350,77 @@ export class OfficeScene {
   }
 
   private tick = 0;
+  private renderAuto(waiting = false): void {
+    const b = this.hud.treeHead.querySelector<HTMLButtonElement>('[data-a="auto-upgrade"]');
+    if (!b) return;
+    const text = `자동 업그레이드 ${this.autoOn ? waiting ? '대기' : 'ON' : 'OFF'}`;
+    if (b.textContent !== text) b.textContent = text;
+    b.classList.toggle('on', this.autoOn);
+    b.setAttribute('aria-pressed', String(this.autoOn));
+  }
+  private setAuto(on: boolean): void {
+    if (!on && !this.autoOn) return;
+    this.autoOn = on && this.active && this.tab === 'tree';
+    this.autoPhase = 'find'; this.autoDelay = 0; this.autoTarget = null;
+    this.tree?.stopFocus();
+    this.autoCursor?.remove(); this.autoCursor = null;
+    this.renderAuto();
+    requestRender();
+  }
+  private autoTap(n: TreeNode): void {
+    this.autoCursor?.remove(); this.autoCursor = null;
+    const p = this.tree?.nodeScreen(n.id);
+    if (!p) return;
+    const r = uiRoot.getBoundingClientRect();
+    const cursor = document.createElement('span');
+    cursor.className = 'auto-tap'; cursor.setAttribute('aria-hidden', 'true');
+    cursor.innerHTML = img('ic.doubleTap');
+    cursor.style.left = `${(p.x - r.left) / view.kd}px`;
+    cursor.style.top = `${(p.y - r.top) / view.kd}px`;
+    this.hud.root.appendChild(cursor); this.autoCursor = cursor;
+  }
+  private updateAuto(dt: number): void {
+    if (!this.autoOn || this.tab !== 'tree' || !this.tree) return;
+    if (document.hidden || document.body.classList.contains('modal-on') || document.querySelector('dialog[open]')) { this.setAuto(false); return; }
+    if (this.autoCuts > 0) return;
+    this.autoDelay -= Math.min(dt, 0.1);
+    if (this.autoDelay > 0) return;
+    if (this.autoPhase === 'find') {
+      this.autoCursor?.remove(); this.autoCursor = null;
+      // Compare current discounted prices, and respect each currency's actual balance.
+      const n = TREE.filter(n => nodeVisible(n) && canBuyNode(n)).sort((a, b) => nodeCost(a) - nodeCost(b))[0];
+      if (!n) {
+        if (TREE.every(n => tlv(n.id) >= n.max)) { this.setAuto(false); toast('스킬 업그레이드 완료', 'ic.check'); return; }
+        this.renderAuto(true); this.autoDelay = 0.8; return;
+      }
+      this.autoTarget = n; this.renderAuto();
+      this.sheet.hide(); this.tree.select(null); this.tree.focusNode(n);
+      this.autoPhase = 'move'; this.autoDelay = 0.65; return;
+    }
+    const n = this.autoTarget;
+    if (!n || (this.autoPhase !== 'effect' && (!nodeVisible(n) || !canBuyNode(n)))) {
+      this.autoPhase = 'find'; this.autoDelay = 0.2; return;
+    }
+    if (this.autoPhase === 'move') {
+      this.tree.select(n.id); this.showNode(n); this.autoTap(n); sfx('ui_tap');
+      this.autoPhase = 'select'; this.autoDelay = 0.75; return;
+    }
+    if (this.autoPhase === 'select') {
+      // Use the same purchase, save, sound, unlock and animation path as manual clicks.
+      this.autoTap(n);
+      if (this.buyNode(n)) { this.autoPhase = 'effect'; this.autoDelay = 1.4; }
+      else { this.autoPhase = 'find'; this.autoDelay = 0.2; }
+      return;
+    }
+    this.autoPhase = 'find'; this.autoTarget = null;
+    this.autoCursor?.remove(); this.autoCursor = null;
+  }
   update(dt: number, wall = dt): void {
     if (!this.active) return;
     S.play += wall;
     this.bg?.update(dt);
     this.tree?.update(dt);
+    this.updateAuto(dt);
     /* 트리 칸 튀기·구매 번쩍 같은 트윈이 도는 동안만 다시 그림(가만히 있으면 사무실은 그리지 않음) */
     if (gsapBusy()) requestRender();
     this.hud.update();

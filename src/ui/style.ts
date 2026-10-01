@@ -601,6 +601,18 @@ body.touching .mb .tip { display:none; }
 .effect-tag b {font-size:14px;font-weight:normal;}
 #ui .skill-info {background:none;border:0;padding:0;display:inline-flex;align-items:center;gap:6px;text-align:left;font-size:inherit;cursor:pointer;}
 .pw h4 small {display:flex;gap:4px;align-items:center;}
+
+/* Automatic purchases keep camera movement, selection and unlock effects visible. */
+#ui .panel.tree .treehead {padding-right:10px;padding-bottom:48px;}
+#ui .panel.tree .tcenter {left:10px;top:44px;translate:none;}
+#ui .panel.tree .legend {top:44px;}
+#ui .auto-upgrade {position:absolute;left:50%;top:44px;transform:translateX(-50%);min-height:30px;padding:4px 9px;border:2px solid #647798;border-radius:999px;background:#101f45;color:#edf5ff;font-size:12px;white-space:nowrap;cursor:pointer;}
+#ui .auto-upgrade.on {background:#226448;border-color:#87dfad;color:white;}
+#ui .auto-tap {position:absolute;z-index:8;pointer-events:none;width:34px;height:34px;margin:-8px 0 0 -8px;animation:autoClick .65s ease-out both;}
+#ui .auto-tap .ic {width:30px;height:30px;filter:drop-shadow(0 2px 2px #13204a);}
+#ui .auto-tap::before {content:'';position:absolute;inset:-6px;border:2px solid #ffe999;border-radius:50%;animation:autoRing .6s ease-out both;}
+@keyframes autoClick {0%{opacity:0;transform:translate(10px,10px) scale(1.15);}30%{opacity:1;transform:translate(0,0) scale(.9);}60%{opacity:1;transform:scale(1);}100%{opacity:0;}}
+@keyframes autoRing {0%{opacity:1;transform:scale(.3);}100%{opacity:0;transform:scale(1.8);}}
 ${kindCss()}  
 `;
 

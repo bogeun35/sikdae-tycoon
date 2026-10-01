@@ -182,6 +182,7 @@ function bgTexture(): Texture {
 
 export interface TreeHooks {
   tap(n: TreeNode, nodeEl: { x: number; y: number }): void;
+  interact?(): void;
 }
 
 export class TreeView {
@@ -480,6 +481,25 @@ export class TreeView {
     requestRender();
   }
 
+  /** Camera movement for visible, paced automatic purchases. */
+  focusNode(n: TreeNode): void {
+    this.stopFocus();
+    memo.user = true;
+    memo.set = true;
+    const scale = this.ct.scale.x;
+    gsap.to(this.ct, {
+      x: this.rect.x + this.rect.w / 2 - n.x * GAP * scale,
+      y: this.rect.y + this.rect.h * 0.43 - n.y * GAP * scale,
+      duration: S.settings.reduceShake ? 0.2 : 0.55,
+      ease: 'power2.inOut',
+      onUpdate: () => { memo.x = this.ct.x; memo.y = this.ct.y; requestRender(); },
+    });
+    requestRender();
+  }
+  stopFocus(): void {
+    gsap.killTweensOf(this.ct);
+  }
+
   /** 구매 연출: 흰 번쩍 + 링 + 반짝 → 연결선 금색 차오름 → 새 이웃이 안개에서 튀어나옴 */
   bought(n: TreeNode): void {
     const v = this.nv.get(n.id);
@@ -534,6 +554,7 @@ export class TreeView {
     on('pointerdown', (e) => {
       if (!this.active || !inRect(e.clientX, e.clientY)) return;
       if (blocked(e)) return;
+      this.hooks.interact?.();
       this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       try {
         cv.setPointerCapture(e.pointerId);
@@ -603,6 +624,7 @@ export class TreeView {
       'wheel',
       (e) => {
         if (!this.active || !inRect(e.clientX, e.clientY)) return;
+        this.hooks.interact?.();
         e.preventDefault();
         const z = Math.max(0.45, Math.min(2.2, memo.z * Math.pow(1.0015, -e.deltaY)));
         this.zoomAt(e.clientX, e.clientY, z);

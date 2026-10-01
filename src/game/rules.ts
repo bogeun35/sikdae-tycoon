@@ -203,9 +203,13 @@ export function statLevels(): { sales: number; tech: number; common: number } {
     const n = TREE_BY[id];
     if (n) r[n.br] += S.tree[id];
   }
+  r.sales += r.common;
   return r;
 }
-export const STAT_MAX = { sales: F.STATS.sales.max as number, tech: F.STATS.tech.max as number };
+export const STAT_MAX = {
+  sales: TREE.filter(n => n.br !== 'tech').reduce((sum, n) => sum + n.max, 0),
+  tech: TREE.filter(n => n.br === 'tech').reduce((sum, n) => sum + n.max, 0),
+};
 
 /* ── 기본 역량 (매출) ─────────────────────────── */
 export type BaseKey = 'power' | 'radius';
