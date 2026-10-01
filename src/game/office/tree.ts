@@ -623,10 +623,10 @@ export class TreeView {
   private clampPan(): void {
     const s = this.ct.scale.x;
     const r = this.rect;
-    const minX = r.x + r.w * 0.5 - 10 * GAP * s;
-    const maxX = r.x + r.w * 0.5 + 10 * GAP * s;
-    const minY = r.y + r.h * 0.5 - 7 * GAP * s;
-    const maxY = r.y + r.h * 0.5 + 7 * GAP * s;
+    const minX = r.x + r.w * 0.5 - Math.max(...TREE.map(n => n.x)) * GAP * s;
+    const maxX = r.x + r.w * 0.5 - Math.min(...TREE.map(n => n.x)) * GAP * s;
+    const minY = r.y + r.h * 0.5 - Math.max(...TREE.map(n => n.y)) * GAP * s;
+    const maxY = r.y + r.h * 0.5 - Math.min(...TREE.map(n => n.y)) * GAP * s;
     this.ct.x = Math.max(minX, Math.min(maxX, this.ct.x));
     this.ct.y = Math.max(minY, Math.min(maxY, this.ct.y));
     memo.x = this.ct.x;

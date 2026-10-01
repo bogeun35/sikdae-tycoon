@@ -30,6 +30,7 @@ export interface TreeNode {
   d: number; br: 'sales' | 'tech' | 'common'; f: string; key: boolean; vals: number[]; costs: number[]; lab: string;
   /** 잠김(설계서 4-1): req = 전부 보유해야, reqAny = 하나 이상 보유해야 강화 가능 */
   help?: string;
+  techStage?: number; techMain?: boolean;
   req?: string[]; reqAny?: string[];
 }
 export interface Rect { x: number; y: number; w: number; h: number }

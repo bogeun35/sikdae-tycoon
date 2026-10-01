@@ -1,7 +1,7 @@
 {
  "meta": {
   "title": "식권대장 타이쿤",
-  "version": "1.5.3",
+  "version": "1.5.5",
   "built": "2026-10-01",
   "nodes": 112
  },
@@ -1429,7 +1429,7 @@
    "orig": "lightning",
    "cd": 5,
    "d": "가까운 거래처부터 차례로 전화 영업을 진행합니다.",
-   "unlockName": "백오피스 개발",
+   "unlockName": "대마플 고객관리시스템 개발",
    "sk": [
     {
      "p": "pl",
@@ -1490,7 +1490,7 @@
    "orig": "bomb",
    "cd": 8,
    "d": "지정한 위치에서 3초 뒤 캠페인이 실행됩니다. 주변 거래처를 한꺼번에 설득합니다.",
-   "unlockName": "마케팅 캠페인 개발",
+   "unlockName": "식대정책 설정 고도화 4",
    "sk": [
     {
      "p": "pl",
@@ -1551,7 +1551,7 @@
    "orig": "jet",
    "cd": 6,
    "d": "직장인 행렬이 이동하며 경로 위 거래처를 설득합니다.",
-   "unlockName": "APP 푸시 개발",
+   "unlockName": "JS 정산관리시스템 개발",
    "sk": [
     {
      "p": "pl",
@@ -1612,7 +1612,7 @@
    "orig": "enet",
    "cd": 7,
    "d": "2초 동안 QR 영역 안의 거래처를 계속 설득합니다.",
-   "unlockName": "QR 결제 개발",
+   "unlockName": "QR캡틴코드개발",
    "sk": [
     {
      "p": "pl",
@@ -21317,10 +21317,10 @@
    "max": 3,
    "icon": "ic.ef_crowd",
    "link": [
-    "app",
     "edu1",
     "log1",
-    "refer1"
+    "refer1",
+    "app"
    ],
    "d": 0,
    "br": "common",
@@ -21371,16 +21371,14 @@
    "x": 1,
    "y": 0,
    "id": "app",
-   "name": "식권대장 APP 개발 · GR",
+   "name": "식권대장 APP개발",
    "ef": "gflat",
    "tg": null,
    "max": 3,
    "icon": "ic.ef_gflat",
    "link": [
-    "pt1",
     "start",
-    "gift1",
-    "time1"
+    "pt1"
    ],
    "d": 1,
    "br": "tech",
@@ -21397,7 +21395,12 @@
     650
    ],
    "lab": "계약 기준금액 +N원",
-   "help": "계약 보상을 계산하는 기본 금액을 높입니다."
+   "help": "계약 보상을 계산하는 기본 금액을 높입니다.",
+   "techStage": 1,
+   "techMain": true,
+   "req": [
+    "start"
+   ]
   },
   {
    "x": -1,
@@ -21409,7 +21412,6 @@
    "max": 5,
    "icon": "ic.ef_respawn",
    "link": [
-    "time1",
     "card1",
     "start",
     "match1"
@@ -21445,7 +21447,6 @@
    "max": 3,
    "icon": "ic.ef_xflat",
    "link": [
-    "gift1",
     "tv23",
     "crowd2",
     "start"
@@ -21477,7 +21478,6 @@
    "max": 3,
    "icon": "ic.ef_match",
    "link": [
-    "amatch",
     "tv45",
     "refer1",
     "edu2"
@@ -21509,7 +21509,6 @@
    "max": 4,
    "icon": "ic.ef_crowd",
    "link": [
-    "disc1",
     "lunch1",
     "log2",
     "log1"
@@ -21531,7 +21530,10 @@
     24000
    ],
    "lab": "처음 등장하는 거래처·동시 등장 한도 +N",
-   "help": "한 번에 만날 수 있는 거래처가 늘어납니다."
+   "help": "한 번에 만날 수 있는 거래처가 늘어납니다.",
+   "req": [
+    "match1"
+   ]
   },
   {
    "x": -1,
@@ -21809,7 +21811,11 @@
     34000
    ],
    "lab": "초당 추가 거래처 수",
-   "help": "새 거래처가 등장하는 간격을 줄입니다."
+   "help": "새 거래처가 등장하는 간격을 줄입니다.",
+   "reqAny": [
+    "wom",
+    "tv45"
+   ]
   },
   {
    "x": -2,
@@ -21844,7 +21850,11 @@
     14400
    ],
    "lab": "해당 거래처 계약 규모 +%",
-   "help": "지정된 거래처에서 얻는 보상을 높입니다."
+   "help": "지정된 거래처에서 얻는 보상을 높입니다.",
+   "reqAny": [
+    "luck1",
+    "lunch1"
+   ]
   },
   {
    "x": -4,
@@ -22011,7 +22021,6 @@
    "link": [
     "d_gangnam",
     "d_yeouido",
-    "comm1",
     "inq1"
    ],
    "d": 4,
@@ -22074,9 +22083,9 @@
    "icon": "ic.ef_gmv",
    "link": [
     "d_yeouido",
-    "fee1",
     "tv89",
-    "ref"
+    "ref",
+    "edu3"
    ],
    "d": 6,
    "br": "sales",
@@ -22100,18 +22109,16 @@
    "help": "계약에서 발생하는 거래액이 늘어납니다."
   },
   {
-   "x": 9,
-   "y": -5,
+   "x": 1,
+   "y": 7,
    "id": "base3",
-   "name": "PG 정산 기반 고도화",
+   "name": "JS 정산관리시스템 고도화",
    "ef": "gflat",
    "tg": null,
    "max": 5,
    "icon": "ic.ef_gflat",
    "link": [
-    "auto1",
-    "f_c09",
-    "f_boss"
+    "s_rush"
    ],
    "d": 14,
    "br": "tech",
@@ -22132,7 +22139,13 @@
     300000000
    ],
    "lab": "계약 기준금액 +N원",
-   "help": "계약 보상을 계산하는 기본 금액을 높입니다."
+   "help": "계약 보상을 계산하는 기본 금액을 높입니다.",
+   "req": [
+    "base2",
+    "s_rush"
+   ],
+   "techStage": 13,
+   "techMain": false
   },
   {
    "x": -9,
@@ -22144,12 +22157,12 @@
    "max": 1,
    "icon": "ic.ef_pflat",
    "link": [
-    "fee1",
     "tv1011",
     "c_penguin",
-    "inq4"
+    "inq4",
+    "gmv1"
    ],
-   "d": 8,
+   "d": 7,
    "br": "sales",
    "f": "n",
    "key": false,
@@ -22179,7 +22192,7 @@
     "f_r08",
     "d_pangyo"
    ],
-   "d": 9,
+   "d": 8,
    "br": "sales",
    "f": "p",
    "key": false,
@@ -22425,7 +22438,6 @@
    "link": [
     "ref",
     "inq4",
-    "fee1",
     "tv1213"
    ],
    "d": 8,
@@ -22493,7 +22505,7 @@
     "edu3",
     "gmv3"
    ],
-   "d": 9,
+   "d": 8,
    "br": "sales",
    "f": "u",
    "key": false,
@@ -22588,7 +22600,7 @@
     "tv1011",
     "gmv4"
    ],
-   "d": 10,
+   "d": 9,
    "br": "sales",
    "f": "u",
    "key": true,
@@ -22616,7 +22628,7 @@
     "inq4",
     "d_magok"
    ],
-   "d": 10,
+   "d": 9,
    "br": "sales",
    "f": "p",
    "key": false,
@@ -22651,7 +22663,7 @@
     "d_pangyo",
     "gmv5"
    ],
-   "d": 11,
+   "d": 10,
    "br": "sales",
    "f": "p",
    "key": false,
@@ -22687,7 +22699,7 @@
     "gmv3",
     "edu4"
    ],
-   "d": 11,
+   "d": 10,
    "br": "sales",
    "f": "u",
    "key": true,
@@ -22711,9 +22723,10 @@
    "icon": "ic.ef_gmv",
    "link": [
     "d_magok",
-    "gmv4"
+    "gmv4",
+    "f_r10"
    ],
-   "d": 12,
+   "d": 10,
    "br": "sales",
    "f": "p",
    "key": false,
@@ -22746,7 +22759,7 @@
    "link": [
     "d_magok"
    ],
-   "d": 12,
+   "d": 11,
    "br": "sales",
    "f": "n",
    "key": false,
@@ -22770,9 +22783,9 @@
    "icon": "ic.ef_radius",
    "link": [
     "luck1",
-    "comm1",
     "grow0",
-    "d_gangnam"
+    "d_gangnam",
+    "c_rabbit"
    ],
    "d": 4,
    "br": "sales",
@@ -22792,19 +22805,19 @@
    "help": "더 넓은 범위에서 영업할 수 있습니다."
   },
   {
-   "x": 8,
-   "y": 6,
+   "x": 5,
+   "y": 4,
    "id": "base2",
-   "name": "APP 결제 기반 개발",
+   "name": "APP푸시개발",
    "ef": "gflat",
    "tg": null,
    "max": 4,
    "icon": "ic.ef_gflat",
    "link": [
-    "gift5",
-    "push1"
+    "f_c04",
+    "f_c05"
    ],
-   "d": 14,
+   "d": 10,
    "br": "tech",
    "f": "w",
    "key": false,
@@ -22821,7 +22834,13 @@
     1600000
    ],
    "lab": "계약 기준금액 +N원",
-   "help": "계약 보상을 계산하는 기본 금액을 높입니다."
+   "help": "계약 보상을 계산하는 기본 금액을 높입니다.",
+   "req": [
+    "app",
+    "f_c04"
+   ],
+   "techStage": 10,
+   "techMain": true
   },
   {
    "x": -4,
@@ -22863,12 +22882,12 @@
    "max": 1,
    "icon": "c.rabbit@idle",
    "link": [
-    "comm1",
     "tv89",
     "pitch1",
-    "d_yeouido"
+    "d_yeouido",
+    "foot2"
    ],
-   "d": 6,
+   "d": 5,
    "br": "sales",
    "f": "u",
    "key": false,
@@ -22879,7 +22898,10 @@
     1100000
    ],
    "lab": "인재 영입 가능",
-   "help": "인재영입에서 영업대장을 영입할 수 있습니다."
+   "help": "인재영입에서 영업대장을 영입할 수 있습니다.",
+   "req": [
+    "d_yeouido"
+   ]
   },
   {
    "x": -5,
@@ -22895,8 +22917,7 @@
    "icon": "ic.ef_tv",
    "link": [
     "grow0",
-    "pitch1",
-    "comm1"
+    "pitch1"
    ],
    "d": 6,
    "br": "sales",
@@ -22933,11 +22954,12 @@
    "icon": "ic.ef_tv",
    "link": [
     "c_rabbit",
-    "f_r10",
     "gmv2",
-    "gmv1"
+    "gmv1",
+    "c_penguin",
+    "c_turtle"
    ],
-   "d": 7,
+   "d": 6,
    "br": "sales",
    "f": "p",
    "key": false,
@@ -22972,7 +22994,7 @@
     "gmv2",
     "c_rabbit"
    ],
-   "d": 7,
+   "d": 6,
    "br": "sales",
    "f": "p",
    "key": false,
@@ -22990,20 +23012,18 @@
    "help": "거래처를 더 빠르게 설득합니다."
   },
   {
-   "x": 9,
-   "y": 4,
+   "x": 5,
+   "y": 7,
    "id": "c_squirrel",
-   "name": "기술대장(CTO) 영입",
+   "name": "식대지급기 고도화",
    "ef": "cap",
    "tg": "squirrel",
    "max": 1,
    "icon": "c.squirrel@idle",
    "link": [
-    "f_r09",
-    "disc2",
-    "dbl_rush"
+    "f_r06"
    ],
-   "d": 13,
+   "d": 16,
    "br": "tech",
    "f": "u",
    "key": false,
@@ -23014,7 +23034,13 @@
     50000000
    ],
    "lab": "인재 영입 가능",
-   "help": "인재영입에서 기술대장(CTO)을 영입할 수 있습니다."
+   "help": "인재영입에서 기술대장(CTO)을 영입할 수 있습니다.",
+   "req": [
+    "time4",
+    "f_r06"
+   ],
+   "techStage": 15,
+   "techMain": false
   },
   {
    "x": -7,
@@ -23030,7 +23056,7 @@
     "c_turtle",
     "tv89"
    ],
-   "d": 8,
+   "d": 7,
    "br": "sales",
    "f": "p",
    "key": false,
@@ -23061,12 +23087,12 @@
    "max": 1,
    "icon": "c.penguin@idle",
    "link": [
-    "f_r10",
     "f_r08",
     "inq5",
-    "edu3"
+    "edu3",
+    "tv89"
    ],
-   "d": 9,
+   "d": 7,
    "br": "sales",
    "f": "u",
    "key": false,
@@ -23092,9 +23118,9 @@
     "gmv2",
     "inq5",
     "c_hawk",
-    "f_r10"
+    "tv89"
    ],
-   "d": 9,
+   "d": 7,
    "br": "sales",
    "f": "u",
    "key": false,
@@ -23120,7 +23146,7 @@
     "tv1415",
     "c_turtle"
    ],
-   "d": 10,
+   "d": 8,
    "br": "sales",
    "f": "u",
    "key": false,
@@ -23135,19 +23161,17 @@
   },
   {
    "x": 9,
-   "y": 2,
+   "y": 7,
    "id": "c_fox",
-   "name": "개발대장 영입",
+   "name": "PG연동 고도화",
    "ef": "cap",
    "tg": "fox",
    "max": 1,
    "icon": "c.fox@idle",
    "link": [
-    "cds_rush",
-    "dbl_rush",
-    "gift4"
+    "f_r07"
    ],
-   "d": 11,
+   "d": 18,
    "br": "tech",
    "f": "u",
    "key": false,
@@ -23158,7 +23182,12 @@
     1300000000
    ],
    "lab": "인재 영입 가능",
-   "help": "인재영입에서 개발대장을 영입할 수 있습니다."
+   "help": "인재영입에서 개발대장을 영입할 수 있습니다.",
+   "techStage": 17,
+   "techMain": false,
+   "req": [
+    "f_r07"
+   ]
   },
   {
    "x": -9,
@@ -23175,7 +23204,7 @@
     "tv1415",
     "c_penguin"
    ],
-   "d": 10,
+   "d": 8,
    "br": "sales",
    "f": "u",
    "key": false,
@@ -23205,7 +23234,7 @@
     "c_lion",
     "f_r08"
    ],
-   "d": 11,
+   "d": 9,
    "br": "sales",
    "f": "u",
    "key": false,
@@ -23236,7 +23265,7 @@
     "d_sejong",
     "inq5"
    ],
-   "d": 11,
+   "d": 9,
    "br": "sales",
    "f": "p",
    "key": false,
@@ -23270,7 +23299,7 @@
     "tv1415",
     "c_dog"
    ],
-   "d": 12,
+   "d": 10,
    "br": "sales",
    "f": "u",
    "key": false,
@@ -23293,9 +23322,10 @@
    "max": 1,
    "icon": "ic.dist_sejong",
    "link": [
-    "tv1415"
+    "tv1415",
+    "f_r10"
    ],
-   "d": 12,
+   "d": 10,
    "br": "sales",
    "f": "u",
    "key": true,
@@ -23309,21 +23339,19 @@
    "help": "세종 지역으로 영업 범위를 넓힙니다."
   },
   {
-   "x": 1,
-   "y": -1,
+   "x": 5,
+   "y": 0,
    "id": "time1",
-   "name": "식권대장 APP 개발 · JR",
+   "name": "결제시스템 고도화",
    "ef": "time",
    "tg": null,
    "max": 3,
    "icon": "ic.ef_time",
    "link": [
-    "f_c03",
-    "refer1",
-    "app",
-    "amatch"
+    "pt1",
+    "s_call"
    ],
-   "d": 2,
+   "d": 3,
    "br": "tech",
    "f": "s",
    "key": false,
@@ -23338,24 +23366,26 @@
     3500
    ],
    "lab": "영업시간 +초",
-   "help": "한 영업일에 쓸 수 있는 시간이 늘어납니다."
+   "help": "한 영업일에 쓸 수 있는 시간이 늘어납니다.",
+   "techStage": 3,
+   "techMain": true,
+   "req": [
+    "pt1"
+   ]
   },
   {
-   "x": 1,
-   "y": 1,
+   "x": 12,
+   "y": 4,
    "id": "gift1",
-   "name": "대마플 개발",
+   "name": "식대정책 설정 고도화 2",
    "ef": "chest",
    "tg": 1,
    "max": 1,
    "icon": "ic.ef_chest",
    "link": [
-    "f_r03",
-    "log1",
-    "disc1",
-    "app"
+    "f_c03"
    ],
-   "d": 2,
+   "d": 8,
    "br": "tech",
    "f": "u",
    "key": false,
@@ -23366,22 +23396,29 @@
     9800
    ],
    "lab": "선물 상자 등급",
-   "help": "1등급 선물 상자가 등장합니다. 현재 지역의 유물이나 기술력을 얻을 수 있습니다."
+   "help": "1등급 선물 상자가 등장합니다. 현재 지역의 유물이나 기술력을 얻을 수 있습니다.",
+   "reqAny": [
+    "disc1",
+    "f_r03"
+   ],
+   "techStage": 7,
+   "techMain": false,
+   "req": [
+    "f_c03"
+   ]
   },
   {
-   "x": 2,
+   "x": 3,
    "y": 0,
    "id": "pt1",
-   "name": "식권대장 APP 개발 · NGR",
+   "name": "GR 영업관리 시스템 개발",
    "ef": "tech",
    "tg": null,
    "max": 5,
    "icon": "ic.tech",
    "link": [
-    "s_call",
     "app",
-    "f_r03",
-    "f_c03"
+    "time1"
    ],
    "d": 2,
    "br": "tech",
@@ -23402,23 +23439,35 @@
     9600
    ],
    "lab": "기술력 +%",
-   "help": "계약으로 얻는 기술력이 늘어납니다."
+   "help": "계약으로 얻는 기술력이 늘어납니다.",
+   "techStage": 2,
+   "techMain": true,
+   "req": [
+    "app"
+   ]
   },
   {
-   "x": 2,
-   "y": -1,
+   "x": 11,
+   "y": 4,
    "id": "f_c03",
-   "name": "고객사 관리 백오피스",
+   "name": "식대정책 설정 개발",
    "ef": "tgt",
    "tg": "c03",
    "max": 1,
    "icon": "t.c03@idle",
    "link": [
+    "f_r03",
+    "f_r04",
     "time2",
-    "time1",
-    "pt1"
+    "cds_call",
+    "gift1",
+    "gift2",
+    "dbl_call",
+    "pt2",
+    "s_promo",
+    "time3"
    ],
-   "d": 3,
+   "d": 7,
    "br": "tech",
    "f": "u",
    "key": true,
@@ -23426,26 +23475,30 @@
     1
    ],
    "costs": [
-    950
+    2400
    ],
    "lab": "새 거래처 해금",
-   "help": "중소기업에 영업할 수 있습니다."
+   "help": "중소기업에 영업할 수 있습니다.",
+   "techStage": 7,
+   "techMain": true,
+   "req": [
+    "f_r03"
+   ]
   },
   {
-   "x": 2,
-   "y": 1,
+   "x": 11,
+   "y": 0,
    "id": "f_r03",
-   "name": "사장님 앱 개발",
+   "name": "사장님 WEB 개발",
    "ef": "tgt",
    "tg": "r03",
    "max": 1,
    "icon": "t.r03@idle",
    "link": [
-    "gift2",
-    "gift1",
-    "pt1"
+    "amatch",
+    "f_c03"
    ],
-   "d": 3,
+   "d": 6,
    "br": "tech",
    "f": "u",
    "key": true,
@@ -23453,27 +23506,31 @@
     1
    ],
    "costs": [
-    950
+    2000
    ],
    "lab": "새 거래처 해금",
-   "help": "푸드트럭에 영업할 수 있습니다."
+   "help": "푸드트럭에 영업할 수 있습니다.",
+   "techStage": 6,
+   "techMain": true,
+   "req": [
+    "amatch"
+   ]
   },
   {
-   "x": 3,
+   "x": 7,
    "y": 0,
    "id": "s_call",
-   "name": "백오피스 개발",
+   "name": "대마플 고객관리시스템 개발",
    "ef": "sk",
    "tg": "call",
    "max": 1,
    "icon": "ic.sk_call",
    "link": [
-    "cds_call",
-    "pt1",
-    "gift2",
-    "time2"
+    "time1",
+    "amatch",
+    "disc1"
    ],
-   "d": 3,
+   "d": 4,
    "br": "tech",
    "f": "u",
    "key": true,
@@ -23484,22 +23541,27 @@
     900
    ],
    "lab": "영업 스킬 해금",
-   "help": "콜드콜을 해금합니다. 역량교육에서 강화할 수 있습니다."
+   "help": "콜드콜을 해금합니다. 역량교육에서 강화할 수 있습니다.",
+   "techStage": 4,
+   "techMain": true,
+   "req": [
+    "time1"
+   ]
   },
   {
-   "x": 1,
-   "y": -2,
+   "x": 9,
+   "y": 0,
    "id": "amatch",
-   "name": "밸런스계약 추천 엔진",
+   "name": "밸런스계약 추천엔진",
    "ef": "autoMatch",
    "tg": null,
    "max": 3,
    "icon": "ic.ef_autoMatch",
    "link": [
-    "match1",
-    "time1"
+    "s_call",
+    "f_r03"
    ],
-   "d": 3,
+   "d": 5,
    "br": "tech",
    "f": "p",
    "key": false,
@@ -23514,22 +23576,26 @@
     11000
    ],
    "lab": "부족한 거래처 우선 탐색 +%",
-   "help": "고객사와 제휴점 중 부족한 쪽을 더 자주 찾습니다."
+   "help": "고객사와 제휴점 중 부족한 쪽을 더 자주 찾습니다.",
+   "techStage": 5,
+   "techMain": true,
+   "req": [
+    "s_call"
+   ]
   },
   {
-   "x": 1,
-   "y": 2,
+   "x": 7,
+   "y": -1,
    "id": "disc1",
-   "name": "백오피스 업무 자동화",
+   "name": "대마플 고객관리시스템 고도화",
    "ef": "disc",
    "tg": null,
    "max": 5,
    "icon": "ic.ef_disc",
    "link": [
-    "crowd2",
-    "gift1"
+    "s_call"
    ],
-   "d": 3,
+   "d": 5,
    "br": "tech",
    "f": "p",
    "key": false,
@@ -23548,23 +23614,26 @@
     38000
    ],
    "lab": "트리 비용 할인 (최대 50%)",
-   "help": "스킬의 업그레이드 비용을 줄입니다."
+   "help": "스킬의 업그레이드 비용을 줄입니다.",
+   "techStage": 4,
+   "techMain": false,
+   "req": [
+    "s_call"
+   ]
   },
   {
-   "x": 3,
-   "y": -1,
+   "x": 11,
+   "y": 3,
    "id": "time2",
-   "name": "백오피스 처리 최적화",
+   "name": "식대정책 설정 고도화",
    "ef": "time",
    "tg": null,
    "max": 3,
    "icon": "ic.ef_time",
    "link": [
-    "dbl_call",
-    "f_c03",
-    "s_call"
+    "f_c03"
    ],
-   "d": 4,
+   "d": 8,
    "br": "tech",
    "f": "s",
    "key": false,
@@ -23579,23 +23648,26 @@
     18000
    ],
    "lab": "영업시간 +초",
-   "help": "한 영업일에 쓸 수 있는 시간이 늘어납니다."
+   "help": "한 영업일에 쓸 수 있는 시간이 늘어납니다.",
+   "techStage": 7,
+   "techMain": false,
+   "req": [
+    "f_c03"
+   ]
   },
   {
-   "x": 3,
-   "y": 1,
+   "x": 11,
+   "y": 5,
    "id": "gift2",
-   "name": "대마플 혜택 연동",
+   "name": "식대정책 설정 확장 2",
    "ef": "chest",
    "tg": 2,
    "max": 1,
    "icon": "ic.ef_chest",
    "link": [
-    "pt2",
-    "f_r03",
-    "s_call"
+    "f_c03"
    ],
-   "d": 4,
+   "d": 8,
    "br": "tech",
    "f": "u",
    "key": false,
@@ -23607,26 +23679,26 @@
    ],
    "lab": "선물 상자 등급",
    "req": [
-    "gift1"
+    "gift1",
+    "f_c03"
    ],
-   "help": "2등급 선물 상자가 등장합니다. 현재 지역의 유물이나 기술력을 얻을 수 있습니다."
+   "help": "2등급 선물 상자가 등장합니다. 현재 지역의 유물이나 기술력을 얻을 수 있습니다.",
+   "techStage": 7,
+   "techMain": false
   },
   {
-   "x": 4,
-   "y": 0,
+   "x": 10,
+   "y": 4,
    "id": "cds_call",
-   "name": "CRM 응답 최적화",
+   "name": "식대정책 설정 확장",
    "ef": "cds",
    "tg": "call",
    "max": 3,
    "icon": "ic.ef_cds",
    "link": [
-    "s_promo",
-    "s_call",
-    "pt2",
-    "dbl_call"
+    "f_c03"
    ],
-   "d": 4,
+   "d": 8,
    "br": "tech",
    "f": "s",
    "key": false,
@@ -23642,25 +23714,26 @@
    ],
    "lab": "재사용",
    "req": [
-    "s_call"
+    "s_call",
+    "f_c03"
    ],
-   "help": "스킬을 다시 사용할 때까지의 시간을 줄입니다."
+   "help": "스킬을 다시 사용할 때까지의 시간을 줄입니다.",
+   "techStage": 7,
+   "techMain": false
   },
   {
-   "x": 4,
-   "y": -1,
+   "x": 11,
+   "y": 2,
    "id": "dbl_call",
-   "name": "CRM 재시도 개발",
+   "name": "식대정책 설정 고도화 3",
    "ef": "dbl",
    "tg": "call",
    "max": 3,
    "icon": "ic.ef_dbl",
    "link": [
-    "f_c04",
-    "time2",
-    "cds_call"
+    "f_c03"
    ],
-   "d": 5,
+   "d": 8,
    "br": "tech",
    "f": "q",
    "key": false,
@@ -23676,25 +23749,26 @@
    ],
    "lab": "연속 발동 +%p",
    "req": [
-    "s_call"
+    "s_call",
+    "f_c03"
    ],
-   "help": "스킬이 한 번 더 발동할 가능성이 커집니다."
+   "help": "스킬이 한 번 더 발동할 가능성이 커집니다.",
+   "techStage": 7,
+   "techMain": false
   },
   {
-   "x": 4,
-   "y": 1,
+   "x": 10,
+   "y": 3,
    "id": "pt2",
-   "name": "개발 인프라 고도화",
+   "name": "식대정책 설정 확장 3",
    "ef": "tech",
    "tg": null,
    "max": 5,
    "icon": "ic.tech",
    "link": [
-    "f_r04",
-    "gift2",
-    "cds_call"
+    "f_c03"
    ],
-   "d": 5,
+   "d": 8,
    "br": "tech",
    "f": "p",
    "key": false,
@@ -23713,24 +23787,26 @@
     430000
    ],
    "lab": "기술력 +%",
-   "help": "계약으로 얻는 기술력이 늘어납니다."
+   "help": "계약으로 얻는 기술력이 늘어납니다.",
+   "techStage": 7,
+   "techMain": false,
+   "req": [
+    "f_c03"
+   ]
   },
   {
-   "x": 5,
-   "y": 0,
+   "x": 12,
+   "y": 3,
    "id": "s_promo",
-   "name": "마케팅 캠페인 개발",
+   "name": "식대정책 설정 고도화 4",
    "ef": "sk",
    "tg": "promo",
    "max": 1,
    "icon": "ic.sk_promo",
    "link": [
-    "time3",
-    "cds_call",
-    "f_r04",
-    "f_c04"
+    "f_c03"
    ],
-   "d": 5,
+   "d": 8,
    "br": "tech",
    "f": "u",
    "key": true,
@@ -23741,23 +23817,27 @@
     26000
    ],
    "lab": "영업 스킬 해금",
-   "help": "프로모션 캠페인을 해금합니다. 역량교육에서 강화할 수 있습니다."
+   "help": "프로모션 캠페인을 해금합니다. 역량교육에서 강화할 수 있습니다.",
+   "techStage": 7,
+   "techMain": false,
+   "req": [
+    "f_c03"
+   ]
   },
   {
-   "x": 5,
-   "y": -1,
+   "x": 7,
+   "y": 4,
    "id": "f_c04",
-   "name": "APP 모바일 식권 고도화",
+   "name": "APP고도화",
    "ef": "tgt",
    "tg": "c04",
    "max": 1,
    "icon": "t.c04@idle",
    "link": [
-    "f_c05",
-    "dbl_call",
-    "s_promo"
+    "f_r04",
+    "base2"
    ],
-   "d": 6,
+   "d": 9,
    "br": "tech",
    "f": "u",
    "key": true,
@@ -23768,23 +23848,28 @@
     92000
    ],
    "lab": "새 거래처 해금",
-   "help": "IT기업에 영업할 수 있습니다."
+   "help": "IT기업에 영업할 수 있습니다.",
+   "req": [
+    "f_c03",
+    "f_r04"
+   ],
+   "techStage": 9,
+   "techMain": true
   },
   {
-   "x": 5,
-   "y": 1,
+   "x": 9,
+   "y": 4,
    "id": "f_r04",
-   "name": "POS 개발",
+   "name": "POS개발",
    "ef": "tgt",
    "tg": "r04",
    "max": 1,
    "icon": "t.r04@idle",
    "link": [
-    "f_r05",
-    "pt2",
-    "s_promo"
+    "f_c03",
+    "f_c04"
    ],
-   "d": 6,
+   "d": 8,
    "br": "tech",
    "f": "u",
    "key": true,
@@ -23795,24 +23880,27 @@
     92000
    ],
    "lab": "새 거래처 해금",
-   "help": "한식뷔페에 영업할 수 있습니다."
+   "help": "한식뷔페에 영업할 수 있습니다.",
+   "req": [
+    "f_r03",
+    "f_c03"
+   ],
+   "techStage": 8,
+   "techMain": true
   },
   {
-   "x": 6,
-   "y": 0,
+   "x": 13,
+   "y": 4,
    "id": "time3",
-   "name": "사장님 앱 운영 자동화",
+   "name": "식대정책 설정 확장 4",
    "ef": "time",
    "tg": null,
    "max": 3,
    "icon": "ic.ef_time",
    "link": [
-    "s_rush",
-    "s_promo",
-    "f_r05",
-    "f_c05"
+    "f_c03"
    ],
-   "d": 6,
+   "d": 8,
    "br": "tech",
    "f": "s",
    "key": false,
@@ -23827,23 +23915,27 @@
     480000
    ],
    "lab": "영업시간 +초",
-   "help": "한 영업일에 쓸 수 있는 시간이 늘어납니다."
+   "help": "한 영업일에 쓸 수 있는 시간이 늘어납니다.",
+   "techStage": 7,
+   "techMain": false,
+   "req": [
+    "f_c03"
+   ]
   },
   {
-   "x": 6,
-   "y": -1,
+   "x": 3,
+   "y": 4,
    "id": "f_c05",
-   "name": "식대 정책 설정 개발",
+   "name": "복지대장 오픈",
    "ef": "tgt",
    "tg": "c05",
    "max": 1,
    "icon": "t.c05@idle",
    "link": [
-    "f_c06",
-    "f_c04",
-    "time3"
+    "base2",
+    "f_r05"
    ],
-   "d": 7,
+   "d": 11,
    "br": "tech",
    "f": "u",
    "key": true,
@@ -23854,23 +23946,28 @@
     9100000
    ],
    "lab": "새 거래처 해금",
-   "help": "중견기업에 영업할 수 있습니다."
+   "help": "중견기업에 영업할 수 있습니다.",
+   "req": [
+    "f_c04",
+    "base2"
+   ],
+   "techStage": 11,
+   "techMain": true
   },
   {
-   "x": 6,
-   "y": 1,
+   "x": 1,
+   "y": 4,
    "id": "f_r05",
-   "name": "POS 연동",
+   "name": "NGR 앱관리시스템 개발",
    "ef": "tgt",
    "tg": "r05",
    "max": 1,
    "icon": "t.r05@idle",
    "link": [
-    "f_r06",
-    "f_r04",
-    "time3"
+    "f_c05",
+    "s_rush"
    ],
-   "d": 7,
+   "d": 12,
    "br": "tech",
    "f": "u",
    "key": true,
@@ -23881,24 +23978,30 @@
     9100000
    ],
    "lab": "새 거래처 해금",
-   "help": "구내식당에 영업할 수 있습니다."
+   "help": "구내식당에 영업할 수 있습니다.",
+   "req": [
+    "f_r04",
+    "f_c05"
+   ],
+   "techStage": 12,
+   "techMain": true
   },
   {
-   "x": 7,
-   "y": 0,
+   "x": 1,
+   "y": 8,
    "id": "s_rush",
-   "name": "APP 푸시 개발",
+   "name": "JS 정산관리시스템 개발",
    "ef": "sk",
    "tg": "rush",
    "max": 1,
    "icon": "ic.sk_rush",
    "link": [
-    "time4",
-    "time3",
-    "f_r06",
-    "f_c06"
+    "f_r05",
+    "f_c06",
+    "base3",
+    "time4"
    ],
-   "d": 7,
+   "d": 13,
    "br": "tech",
    "f": "u",
    "key": true,
@@ -23909,23 +24012,31 @@
     10000000
    ],
    "lab": "영업 스킬 해금",
-   "help": "점심 피크타임을 해금합니다. 역량교육에서 강화할 수 있습니다."
+   "help": "점심 피크타임을 해금합니다. 역량교육에서 강화할 수 있습니다.",
+   "reqAny": [
+    "f_c05",
+    "f_r05"
+   ],
+   "techStage": 13,
+   "techMain": true,
+   "req": [
+    "f_r05"
+   ]
   },
   {
-   "x": 7,
-   "y": -1,
+   "x": 3,
+   "y": 8,
    "id": "f_c06",
-   "name": "교대근무 식대 기능 개발",
+   "name": "POS시스템 개발",
    "ef": "tgt",
    "tg": "c06",
    "max": 1,
    "icon": "t.c06@idle",
    "link": [
-    "gift3",
-    "f_c05",
-    "s_rush"
+    "s_rush",
+    "f_r06"
    ],
-   "d": 8,
+   "d": 14,
    "br": "tech",
    "f": "u",
    "key": true,
@@ -23936,23 +24047,29 @@
     36000000
    ],
    "lab": "새 거래처 해금",
-   "help": "산단 공장에 영업할 수 있습니다."
+   "help": "산단 공장에 영업할 수 있습니다.",
+   "req": [
+    "f_c05",
+    "s_rush"
+   ],
+   "techStage": 14,
+   "techMain": true
   },
   {
-   "x": 7,
-   "y": 1,
+   "x": 5,
+   "y": 8,
    "id": "f_r06",
-   "name": "배달 주문 API 연동",
+   "name": "식대지급기 개발",
    "ef": "tgt",
    "tg": "r06",
    "max": 1,
    "icon": "t.r06@idle",
    "link": [
-    "f_r07",
-    "f_r05",
-    "s_rush"
+    "f_c06",
+    "cds_promo",
+    "c_squirrel"
    ],
-   "d": 8,
+   "d": 15,
    "br": "tech",
    "f": "u",
    "key": true,
@@ -23963,24 +24080,27 @@
     36000000
    ],
    "lab": "새 거래처 해금",
-   "help": "배달 맛집에 영업할 수 있습니다."
+   "help": "배달 맛집에 영업할 수 있습니다.",
+   "req": [
+    "f_r05",
+    "f_c06"
+   ],
+   "techStage": 15,
+   "techMain": true
   },
   {
-   "x": 8,
-   "y": 0,
+   "x": 2,
+   "y": 8,
    "id": "time4",
-   "name": "대마플 운영 자동화",
+   "name": "JS 정산관리시스템 확장",
    "ef": "time",
    "tg": null,
    "max": 3,
    "icon": "ic.ef_time",
    "link": [
-    "cds_promo",
-    "s_rush",
-    "f_r07",
-    "gift3"
+    "s_rush"
    ],
-   "d": 8,
+   "d": 14,
    "br": "tech",
    "f": "s",
    "key": false,
@@ -23995,24 +24115,26 @@
     190000000
    ],
    "lab": "영업시간 +초",
-   "help": "한 영업일에 쓸 수 있는 시간이 늘어납니다."
+   "help": "한 영업일에 쓸 수 있는 시간이 늘어납니다.",
+   "techStage": 13,
+   "techMain": false,
+   "req": [
+    "s_rush"
+   ]
   },
   {
-   "x": 8,
-   "y": -1,
+   "x": 7,
+   "y": 7,
    "id": "gift3",
-   "name": "대마플 캠페인 연동",
+   "name": "앱 모바일 디자인UI 고도화",
    "ef": "chest",
    "tg": 3,
    "max": 1,
    "icon": "ic.ef_chest",
    "link": [
-    "dbl_promo",
-    "f_c06",
-    "time4",
-    "f_c07"
+    "cds_promo"
    ],
-   "d": 9,
+   "d": 17,
    "br": "tech",
    "f": "u",
    "key": false,
@@ -24024,26 +24146,33 @@
    ],
    "lab": "선물 상자 등급",
    "req": [
-    "gift2"
+    "gift2",
+    "cds_promo"
    ],
-   "help": "3등급 선물 상자가 등장합니다. 현재 지역의 유물이나 기술력을 얻을 수 있습니다."
+   "help": "3등급 선물 상자가 등장합니다. 현재 지역의 유물이나 기술력을 얻을 수 있습니다.",
+   "techStage": 16,
+   "techMain": false
   },
   {
-   "x": 8,
-   "y": 1,
+   "x": 9,
+   "y": 8,
    "id": "f_r07",
-   "name": "PG 연동",
+   "name": "PG연동개발",
    "ef": "tgt",
    "tg": "r07",
    "max": 1,
    "icon": "t.r07@idle",
    "link": [
-    "gift4",
-    "f_r06",
+    "cds_promo",
+    "s_qr",
+    "c_fox",
     "cds_rush",
-    "time4"
+    "dbl_promo",
+    "f_c07",
+    "gift4",
+    "pt3"
    ],
-   "d": 9,
+   "d": 17,
    "br": "tech",
    "f": "u",
    "key": true,
@@ -24054,23 +24183,29 @@
     560000000
    ],
    "lab": "새 거래처 해금",
-   "help": "카페에 영업할 수 있습니다."
+   "help": "카페에 영업할 수 있습니다.",
+   "req": [
+    "f_r06",
+    "cds_promo"
+   ],
+   "techStage": 17,
+   "techMain": true
   },
   {
-   "x": 9,
-   "y": 0,
+   "x": 7,
+   "y": 8,
    "id": "cds_promo",
-   "name": "캠페인 처리 최적화",
+   "name": "앱 모바일 디자인UI개선",
    "ef": "cds",
    "tg": "promo",
    "max": 3,
    "icon": "ic.ef_cds",
    "link": [
-    "time4",
-    "gift4",
-    "dbl_promo"
+    "f_r06",
+    "f_r07",
+    "gift3"
    ],
-   "d": 9,
+   "d": 16,
    "br": "tech",
    "f": "s",
    "key": false,
@@ -24086,25 +24221,26 @@
    ],
    "lab": "재사용",
    "req": [
-    "s_promo"
+    "s_promo",
+    "f_r06"
    ],
-   "help": "스킬을 다시 사용할 때까지의 시간을 줄입니다."
+   "help": "스킬을 다시 사용할 때까지의 시간을 줄입니다.",
+   "techStage": 16,
+   "techMain": true
   },
   {
-   "x": 9,
-   "y": -1,
+   "x": 10,
+   "y": 8,
    "id": "dbl_promo",
-   "name": "캠페인 반복 실행",
+   "name": "PG연동 고도화 2",
    "ef": "dbl",
    "tg": "promo",
    "max": 3,
    "icon": "ic.ef_dbl",
    "link": [
-    "gift3",
-    "cds_promo",
-    "s_qr"
+    "f_r07"
    ],
-   "d": 10,
+   "d": 18,
    "br": "tech",
    "f": "q",
    "key": false,
@@ -24120,25 +24256,26 @@
    ],
    "lab": "연속 발동 +%p",
    "req": [
-    "s_promo"
+    "s_promo",
+    "f_r07"
    ],
-   "help": "스킬이 한 번 더 발동할 가능성이 커집니다."
+   "help": "스킬이 한 번 더 발동할 가능성이 커집니다.",
+   "techStage": 17,
+   "techMain": false
   },
   {
    "x": 9,
-   "y": 1,
+   "y": 6,
    "id": "gift4",
-   "name": "대마플 파트너 API",
+   "name": "PG연동 고도화 3",
    "ef": "chest",
    "tg": 4,
    "max": 1,
    "icon": "ic.ef_chest",
    "link": [
-    "f_r07",
-    "c_fox",
-    "cds_promo"
+    "f_r07"
    ],
-   "d": 10,
+   "d": 18,
    "br": "tech",
    "f": "u",
    "key": false,
@@ -24150,25 +24287,26 @@
    ],
    "lab": "선물 상자 등급",
    "req": [
-    "gift3"
+    "gift3",
+    "f_r07"
    ],
-   "help": "4등급 선물 상자가 등장합니다. 현재 지역의 유물이나 기술력을 얻을 수 있습니다."
+   "help": "4등급 선물 상자가 등장합니다. 현재 지역의 유물이나 기술력을 얻을 수 있습니다.",
+   "techStage": 17,
+   "techMain": false
   },
   {
-   "x": 8,
-   "y": -2,
+   "x": 9,
+   "y": 9,
    "id": "f_c07",
-   "name": "VONE 백오피스 개발",
+   "name": "PG연동 확장 2",
    "ef": "tgt",
    "tg": "c07",
    "max": 1,
    "icon": "t.c07@idle",
    "link": [
-    "s_qr",
-    "gift3",
-    "f_c08"
+    "f_r07"
    ],
-   "d": 10,
+   "d": 18,
    "br": "tech",
    "f": "u",
    "key": true,
@@ -24179,23 +24317,28 @@
     2200000000
    ],
    "lab": "새 거래처 해금",
-   "help": "공공기관에 영업할 수 있습니다."
+   "help": "공공기관에 영업할 수 있습니다.",
+   "req": [
+    "f_c06",
+    "f_r07"
+   ],
+   "techStage": 17,
+   "techMain": false
   },
   {
-   "x": 9,
-   "y": -2,
+   "x": 11,
+   "y": 8,
    "id": "s_qr",
-   "name": "QR 결제 개발",
+   "name": "QR캡틴코드개발",
    "ef": "sk",
    "tg": "qr",
    "max": 1,
    "icon": "ic.sk_qr",
    "link": [
-    "f_c07",
-    "dbl_promo",
-    "cds_qr"
+    "f_r07",
+    "f_c08"
    ],
-   "d": 11,
+   "d": 18,
    "br": "tech",
    "f": "u",
    "key": true,
@@ -24206,23 +24349,30 @@
     6600000000
    ],
    "lab": "영업 스킬 해금",
-   "help": "QR 영업을 해금합니다. 역량교육에서 강화할 수 있습니다."
+   "help": "QR 영업을 해금합니다. 역량교육에서 강화할 수 있습니다.",
+   "techStage": 18,
+   "techMain": true,
+   "req": [
+    "f_r07"
+   ]
   },
   {
-   "x": 8,
-   "y": -3,
+   "x": 11,
+   "y": 12,
    "id": "f_c08",
-   "name": "VONE 야간 식대 개발",
+   "name": "푸시기능개발",
    "ef": "tgt",
    "tg": "c08",
    "max": 1,
    "icon": "t.c08@idle",
    "link": [
+    "s_qr",
+    "f_r09",
+    "dbl_rush",
     "cds_qr",
-    "f_c07",
     "dbl_qr"
    ],
-   "d": 11,
+   "d": 19,
    "br": "tech",
    "f": "u",
    "key": true,
@@ -24233,23 +24383,27 @@
     7700000000
    ],
    "lab": "새 거래처 해금",
-   "help": "대학병원에 영업할 수 있습니다."
+   "help": "대학병원에 영업할 수 있습니다.",
+   "req": [
+    "f_c07",
+    "s_qr"
+   ],
+   "techStage": 19,
+   "techMain": true
   },
   {
-   "x": 9,
-   "y": -3,
+   "x": 10,
+   "y": 12,
    "id": "cds_qr",
-   "name": "QR 응답 최적화",
+   "name": "푸시기능 확장",
    "ef": "cds",
    "tg": "qr",
    "max": 3,
    "icon": "ic.ef_cds",
    "link": [
-    "f_c08",
-    "s_qr",
-    "f_c09"
+    "f_c08"
    ],
-   "d": 12,
+   "d": 20,
    "br": "tech",
    "f": "s",
    "key": false,
@@ -24265,25 +24419,26 @@
    ],
    "lab": "재사용",
    "req": [
-    "s_qr"
+    "s_qr",
+    "f_c08"
    ],
-   "help": "스킬을 다시 사용할 때까지의 시간을 줄입니다."
+   "help": "스킬을 다시 사용할 때까지의 시간을 줄입니다.",
+   "techStage": 19,
+   "techMain": false
   },
   {
-   "x": 8,
-   "y": -4,
+   "x": 12,
+   "y": 12,
    "id": "dbl_qr",
-   "name": "QR 재발급 개발",
+   "name": "푸시기능 고도화 2",
    "ef": "dbl",
    "tg": "qr",
    "max": 3,
    "icon": "ic.ef_dbl",
    "link": [
-    "f_c09",
-    "f_c08",
-    "auto1"
+    "f_c08"
    ],
-   "d": 12,
+   "d": 20,
    "br": "tech",
    "f": "q",
    "key": false,
@@ -24299,25 +24454,28 @@
    ],
    "lab": "연속 발동 +%p",
    "req": [
-    "s_qr"
+    "s_qr",
+    "f_c08"
    ],
-   "help": "스킬이 한 번 더 발동할 가능성이 커집니다."
+   "help": "스킬이 한 번 더 발동할 가능성이 커집니다.",
+   "techStage": 19,
+   "techMain": false
   },
   {
-   "x": 9,
-   "y": -4,
+   "x": 3,
+   "y": 12,
    "id": "f_c09",
-   "name": "기업 ERP 연동",
+   "name": "인사/식대연동 개발",
    "ef": "tgt",
    "tg": "c09",
    "max": 1,
    "icon": "t.c09@idle",
    "link": [
-    "dbl_qr",
-    "cds_qr",
-    "base3"
+    "auto1",
+    "f_c10",
+    "disc2"
    ],
-   "d": 13,
+   "d": 23,
    "br": "tech",
    "f": "u",
    "key": true,
@@ -24328,23 +24486,28 @@
     830000000000
    ],
    "lab": "새 거래처 해금",
-   "help": "대기업에 영업할 수 있습니다."
+   "help": "대기업에 영업할 수 있습니다.",
+   "req": [
+    "f_c08",
+    "auto1"
+   ],
+   "techStage": 23,
+   "techMain": true
   },
   {
-   "x": 8,
-   "y": -5,
+   "x": 5,
+   "y": 12,
    "id": "auto1",
-   "name": "CRM 자동화 개발",
+   "name": "VONE 통합백오피스 개발",
    "ef": "auto",
    "tg": null,
    "max": 3,
    "icon": "ic.ef_auto",
    "link": [
-    "base3",
-    "dbl_qr",
-    "f_c10"
+    "push1",
+    "f_c09"
    ],
-   "d": 13,
+   "d": 22,
    "br": "tech",
    "f": "p",
    "key": false,
@@ -24359,11 +24522,16 @@
     1800000000000
    ],
    "lab": "모든 거래처에 초당 영업기술의 N% 적용",
-   "help": "화면의 모든 거래처에 자동으로 설득 효과를 적용합니다."
+   "help": "화면의 모든 거래처에 자동으로 설득 효과를 적용합니다.",
+   "techStage": 22,
+   "techMain": true,
+   "req": [
+    "push1"
+   ]
   },
   {
-   "x": -8,
-   "y": 0,
+   "x": -12,
+   "y": 2,
    "id": "fee1",
    "name": "고객사 이용료 계약",
    "ef": "fee",
@@ -24371,12 +24539,10 @@
    "max": 5,
    "icon": "ic.ef_fee",
    "link": [
-    "gmv1",
-    "edu3",
-    "f_r10",
-    "refN"
+    "comm1",
+    "f_r10"
    ],
-   "d": 7,
+   "d": 10,
    "br": "sales",
    "f": "p",
    "key": false,
@@ -24395,22 +24561,26 @@
     8300000000000
    ],
    "lab": "이용료 매출 +%",
-   "help": "고객사 계약의 이용료 매출이 늘어납니다."
+   "help": "고객사 계약의 이용료 매출이 늘어납니다.",
+   "req": [
+    "f_r10"
+   ]
   },
   {
-   "x": 8,
-   "y": -6,
+   "x": 1,
+   "y": 12,
    "id": "f_c10",
-   "name": "그룹사 정산 백오피스",
+   "name": "그룹사 연동시스템 개발",
    "ef": "tgt",
    "tg": "c10",
    "max": 1,
    "icon": "t.c10@idle",
    "link": [
-    "f_boss",
-    "auto1"
+    "f_c09",
+    "gift5",
+    "f_boss"
    ],
-   "d": 14,
+   "d": 24,
    "br": "tech",
    "f": "u",
    "key": true,
@@ -24421,22 +24591,26 @@
     5800000000000
    ],
    "lab": "새 거래처 해금",
-   "help": "그룹 본사에 영업할 수 있습니다."
+   "help": "그룹 본사에 영업할 수 있습니다.",
+   "req": [
+    "f_c09"
+   ],
+   "techStage": 24,
+   "techMain": true
   },
   {
-   "x": 9,
-   "y": -6,
+   "x": 2,
+   "y": 12,
    "id": "f_boss",
-   "name": "전국 식대 플랫폼",
+   "name": "그룹사 연동시스템 확장",
    "ef": "tgt",
    "tg": "boss",
    "max": 1,
    "icon": "t.boss@idle",
    "link": [
-    "f_c10",
-    "base3"
+    "f_c10"
    ],
-   "d": 15,
+   "d": 25,
    "br": "tech",
    "f": "u",
    "key": true,
@@ -24447,23 +24621,26 @@
     18000000000000
    ],
    "lab": "새 거래처 해금",
-   "help": "대장그룹 트윈타워에 영업할 수 있습니다."
+   "help": "대장그룹 트윈타워에 영업할 수 있습니다.",
+   "req": [
+    "f_c10"
+   ],
+   "techStage": 24,
+   "techMain": false
   },
   {
    "x": 8,
-   "y": 2,
+   "y": 8,
    "id": "cds_rush",
-   "name": "푸시 처리 최적화",
+   "name": "PG연동 확장",
    "ef": "cds",
    "tg": "rush",
    "max": 3,
    "icon": "ic.ef_cds",
    "link": [
-    "c_fox",
-    "pt3",
     "f_r07"
    ],
-   "d": 10,
+   "d": 18,
    "br": "tech",
    "f": "s",
    "key": false,
@@ -24479,9 +24656,12 @@
    ],
    "lab": "재사용",
    "req": [
-    "s_rush"
+    "s_rush",
+    "f_r07"
    ],
-   "help": "스킬을 다시 사용할 때까지의 시간을 줄입니다."
+   "help": "스킬을 다시 사용할 때까지의 시간을 줄입니다.",
+   "techStage": 17,
+   "techMain": false
   },
   {
    "x": -10,
@@ -24495,9 +24675,10 @@
    "link": [
     "c_penguin",
     "c_dog",
-    "tv1011"
+    "tv1011",
+    "f_r10"
    ],
-   "d": 10,
+   "d": 8,
    "br": "sales",
    "f": "u",
    "key": true,
@@ -24508,23 +24689,24 @@
     7700000000
    ],
    "lab": "새 거래처 해금",
-   "help": "편의점에 영업할 수 있습니다."
+   "help": "편의점에 영업할 수 있습니다.",
+   "req": [
+    "f_r07"
+   ]
   },
   {
    "x": 8,
-   "y": 3,
+   "y": 7,
    "id": "pt3",
-   "name": "플랫폼 확장 개발",
+   "name": "PG연동 확장 3",
    "ef": "tech",
    "tg": null,
    "max": 5,
    "icon": "ic.tech",
    "link": [
-    "dbl_rush",
-    "f_r09",
-    "cds_rush"
+    "f_r07"
    ],
-   "d": 11,
+   "d": 18,
    "br": "tech",
    "f": "p",
    "key": false,
@@ -24543,23 +24725,26 @@
     100000000000
    ],
    "lab": "기술력 +%",
-   "help": "계약으로 얻는 기술력이 늘어납니다."
+   "help": "계약으로 얻는 기술력이 늘어납니다.",
+   "techStage": 17,
+   "techMain": false,
+   "req": [
+    "f_r07"
+   ]
   },
   {
-   "x": 9,
-   "y": 3,
+   "x": 11,
+   "y": 11,
    "id": "dbl_rush",
-   "name": "푸시 재전송 개발",
+   "name": "푸시기능 고도화",
    "ef": "dbl",
    "tg": "rush",
    "max": 3,
    "icon": "ic.ef_dbl",
    "link": [
-    "pt3",
-    "c_squirrel",
-    "c_fox"
+    "f_c08"
    ],
-   "d": 12,
+   "d": 20,
    "br": "tech",
    "f": "q",
    "key": false,
@@ -24575,25 +24760,27 @@
    ],
    "lab": "연속 발동 +%p",
    "req": [
-    "s_rush"
+    "s_rush",
+    "f_c08"
    ],
-   "help": "스킬이 한 번 더 발동할 가능성이 커집니다."
+   "help": "스킬이 한 번 더 발동할 가능성이 커집니다.",
+   "techStage": 19,
+   "techMain": false
   },
   {
-   "x": 8,
-   "y": 4,
+   "x": 9,
+   "y": 12,
    "id": "f_r09",
-   "name": "정산 자동화 개발",
+   "name": "알림톡 기능개발",
    "ef": "tgt",
    "tg": "r09",
    "max": 1,
    "icon": "t.r09@idle",
    "link": [
-    "c_squirrel",
-    "push1",
-    "pt3"
+    "f_c08",
+    "push1"
    ],
-   "d": 12,
+   "d": 20,
    "br": "tech",
    "f": "u",
    "key": true,
@@ -24604,11 +24791,17 @@
     16000000000
    ],
    "lab": "새 거래처 해금",
-   "help": "대형 프랜차이즈에 영업할 수 있습니다."
+   "help": "대형 프랜차이즈에 영업할 수 있습니다.",
+   "req": [
+    "f_r08",
+    "f_c08"
+   ],
+   "techStage": 20,
+   "techMain": true
   },
   {
-   "x": -8,
-   "y": 1,
+   "x": -11,
+   "y": 3,
    "id": "f_r10",
    "name": "위탁급식 계약 확대",
    "ef": "tgt",
@@ -24616,12 +24809,13 @@
    "max": 1,
    "icon": "t.r10@idle",
    "link": [
-    "tv89",
-    "c_penguin",
-    "c_turtle",
+    "gmv5",
+    "d_sejong",
+    "f_r08",
+    "comm1",
     "fee1"
    ],
-   "d": 8,
+   "d": 9,
    "br": "sales",
    "f": "u",
    "key": true,
@@ -24632,23 +24826,26 @@
     830000000000
    ],
    "lab": "새 거래처 해금",
-   "help": "위탁급식 본사에 영업할 수 있습니다."
+   "help": "위탁급식 본사에 영업할 수 있습니다.",
+   "req": [
+    "d_sejong",
+    "f_r09"
+   ]
   },
   {
-   "x": 8,
-   "y": 5,
+   "x": 7,
+   "y": 12,
    "id": "push1",
-   "name": "APP 푸시 고도화",
+   "name": "프랜차이즈 연동시스템 개발",
    "ef": "fps",
    "tg": null,
    "max": 1,
    "icon": "ic.ef_fps",
    "link": [
-    "disc2",
-    "base2",
-    "f_r09"
+    "f_r09",
+    "auto1"
    ],
-   "d": 13,
+   "d": 21,
    "br": "tech",
    "f": "n",
    "key": false,
@@ -24659,23 +24856,26 @@
     600000000000
    ],
    "lab": "초당 추가 거래처 수",
-   "help": "새 거래처가 등장하는 간격을 줄입니다."
+   "help": "새 거래처가 등장하는 간격을 줄입니다.",
+   "techStage": 21,
+   "techMain": true,
+   "req": [
+    "f_r09"
+   ]
   },
   {
-   "x": 9,
-   "y": 5,
+   "x": 3,
+   "y": 11,
    "id": "disc2",
-   "name": "VONE 업무 자동화",
+   "name": "인사/식대연동 고도화",
    "ef": "disc",
    "tg": null,
    "max": 5,
    "icon": "ic.ef_disc",
    "link": [
-    "push1",
-    "gift5",
-    "c_squirrel"
+    "f_c09"
    ],
-   "d": 14,
+   "d": 24,
    "br": "tech",
    "f": "p",
    "key": false,
@@ -24694,11 +24894,17 @@
     8200000000000
    ],
    "lab": "트리 비용 할인 (최대 50%)",
-   "help": "스킬의 업그레이드 비용을 줄입니다."
+   "help": "스킬의 업그레이드 비용을 줄입니다.",
+   "req": [
+    "push1",
+    "f_c09"
+   ],
+   "techStage": 23,
+   "techMain": false
   },
   {
-   "x": -5,
-   "y": 1,
+   "x": -12,
+   "y": 4,
    "id": "comm1",
    "name": "제휴 수수료 협상",
    "ef": "comm",
@@ -24706,12 +24912,10 @@
    "max": 5,
    "icon": "ic.ef_comm",
    "link": [
-    "foot2",
-    "c_rabbit",
-    "tv67",
-    "attitude1"
+    "f_r10",
+    "fee1"
    ],
-   "d": 5,
+   "d": 10,
    "br": "sales",
    "f": "p",
    "key": false,
@@ -24730,22 +24934,24 @@
     7100000000000
    ],
    "lab": "수수료 매출 +%",
-   "help": "제휴점 계약의 수수료 매출이 늘어납니다."
+   "help": "제휴점 계약의 수수료 매출이 늘어납니다.",
+   "req": [
+    "f_r10"
+   ]
   },
   {
-   "x": 9,
-   "y": 6,
+   "x": 1,
+   "y": 11,
    "id": "gift5",
-   "name": "대마플 통합 플랫폼",
+   "name": "그룹사 연동시스템 고도화",
    "ef": "chest",
    "tg": 5,
    "max": 1,
    "icon": "ic.ef_chest",
    "link": [
-    "base2",
-    "disc2"
+    "f_c10"
    ],
-   "d": 15,
+   "d": 25,
    "br": "tech",
    "f": "u",
    "key": false,
@@ -24757,9 +24963,12 @@
    ],
    "lab": "선물 상자 등급",
    "req": [
-    "gift4"
+    "gift4",
+    "f_c10"
    ],
-   "help": "5등급 선물 상자가 등장합니다. 현재 지역의 유물이나 기술력을 얻을 수 있습니다."
+   "help": "5등급 선물 상자가 등장합니다. 현재 지역의 유물이나 기술력을 얻을 수 있습니다.",
+   "techStage": 24,
+   "techMain": false
   }
  ],
  "iconNames": [

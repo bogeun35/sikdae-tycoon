@@ -173,7 +173,7 @@ export function nodeLinked(n: TreeNode): boolean {
   return n.id === TREE_CENTER || n.link.some(owns);
 }
 export function nodeVisible(n: TreeNode): boolean {
-  return n.id === TREE_CENTER || owns(n.id) || n.link.some(owns);
+  return n.id === TREE_CENTER || owns(n.id) || (n.link.some(owns) && nodeReqOk(n));
 }
 /** 선행 칸 조건(req = 전부 · reqAny = 하나 이상) */
 export function nodeReqOk(n: TreeNode): boolean {

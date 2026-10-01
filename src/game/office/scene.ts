@@ -18,7 +18,7 @@ import { rasterKey } from '../core/tex';
 import { districtCut, sparkleAt } from '../fx/top';
 import { OfficeBg } from './bg';
 import { TreeView } from './tree';
-import { OfficeHud, levelInfo, modLine } from '../../ui/hud';
+import { OfficeHud, levelInfo } from '../../ui/hud';
 import { Panels, type PanelHooks } from '../../ui/panels';
 import { Sheet } from '../../ui/sheet';
 import { img, tapKey, toast } from '../../ui/dom';
@@ -33,18 +33,7 @@ export interface OfficeHooks extends Omit<PanelHooks, 'refresh' | 'confirm'> {
 const TABS = ['tree', 'reps', 'dex', 'items', 'skills'];
 
 /** 효과 설명의 자리표시(+N · +% · +%p · +초 · N%)를 뺀다 — 값은 뒤에 "현재 → 다음"으로 붙는다 */
-function labText(lab: string): string {
-  return lab
-    .replace(/\s*\+N원/g, '')
-    .replace(/\s*\+초/g, '')
-    .replace(/\s*\+%p/g, '')
-    .replace(/\s*\+%/g, '')
-    .replace(/\s*\+N(?![0-9A-Za-z])/g, '')
-    .replace(/의 N% 피해/g, ' 비례 피해')
-    .replace(/\s{2,}/g, ' ')
-    .replace(/ · /g, '·')
-    .trim();
-}
+
 
 export class OfficeScene {
   readonly hud: OfficeHud;
@@ -210,35 +199,18 @@ export class OfficeScene {
   /* ── 트리 칸 ── */
   private nodeDesc(n: TreeNode): { title: string; desc: string } {
     const l = tlv(n.id);
-    const title = `${n.name}${n.max > 1 ? ` ${l}/${n.max}` : ''}`;
-    const sum = (k: number) => n.vals.slice(0, k).reduce((a, b) => a + b, 0);
-    let desc = n.lab;
-    const tg = n.tg;
-    /* 설명 바는 효과 수치 위주 한 줄(제목에 칸 이름이 있음) */
-    if (n.ef === 'tgt') {
-      const t = TARGET_BY[String(tg)];
-      desc = `새 거래처: ${t.name} (${t.sizeLabel})`;
-    } else if (n.ef === 'district') {
-      const d = DISTRICT_BY[String(tg)];
-      desc = modLine(d.mod);
-    } else if (n.ef === 'cap') {
-      const c = CHAR_BY[String(tg)];
-      desc = c.sk;
-    } else if (n.ef === 'sk') {
-      const s = SKILLS[String(tg) as keyof typeof SKILLS];
-      desc = `새 스킬: ${s.name}`;
-    } else if (n.ef === 'chest' || n.ef === 'inquiry') {
-      desc = `${n.ef === 'chest' ? '선물 상자' : '인바운드 문의'} ${tg}등급`;
-    } else if (n.ef === 'tv') {
-      const list = (Array.isArray(tg) ? tg : String(tg).split(',')).map((id) => TARGET_BY[id]?.name).filter(Boolean);
-      desc = `${list.join('·')} 계약 규모 ${fmtVal('p', n.ef, sum(l))}${l < n.max ? ` → ${fmtVal('p', n.ef, sum(l + 1))}` : ''}`;
-    } else if (n.f !== 'u') {
-      const cur = fmtVal(n.f, n.ef, sum(l));
-      const nx = l < n.max ? fmtVal(n.f, n.ef, sum(l + 1)) : '';
-      const tgName = n.ef === 'cds' || n.ef === 'dbl' ? `${SKILLS[String(tg) as keyof typeof SKILLS]?.name || ''} ` : '';
-      desc = `${tgName}${labText(n.lab)} · ${l ? cur : '0'}${nx ? ` → ${nx}` : ''}`;
-    }
-    return { title, desc: `${n.help ? n.help + '<br>' : ''}${desc}` };
+    const title = `${n.techStage ? n.techStage + '. ' : ''}${n.name}${n.max > 1 ? ` ${l}/${n.max}` : ''}`;
+    let desc = '';
+    if (n.f !== 'u') {
+      const value = l < n.max ? n.vals[l] : n.vals.reduce((a, b) => a + b, 0);
+      desc = fmtVal(n.f, n.ef, value).replaceAll('곳', '');
+    } else if (n.ef === 'tgt') desc = `${TARGET_BY[String(n.tg)].name} 해금`;
+    else if (n.ef === 'district') desc = `${DISTRICT_BY[String(n.tg)].name} 해금`;
+    else if (n.ef === 'cap') desc = `${CHAR_BY[String(n.tg)].name} 영입 가능`;
+    else if (n.ef === 'sk') desc = `${SKILLS[String(n.tg) as keyof typeof SKILLS].name} 해금`;
+    else if (n.ef === 'chest' || n.ef === 'inquiry') desc = `${n.tg}등급 해금`;
+    else desc = '해금';
+    return { title, desc };
   }
   private showNode(n: TreeNode): void {
     const { title, desc } = this.nodeDesc(n);
