@@ -5,7 +5,7 @@
  */
 import { CHAR_BY, DISTRICT_BY, SKILLS, SKILL_ORDER, TARGET_BY, type SkillId } from '../game/data';
 import { fmt, fmtShort } from '../game/format';
-import { E, lvPowerMult, nextMasteryUnlock, skillUnlocked, STAT_MAX, xpNeed } from '../game/rules';
+import { E, lvPowerMult, nextMasteryUnlock, skillUnlocked, STAT_MAX, xpNeed, userCount } from '../game/rules';
 import { S } from '../game/state';
 import type { HudId } from '../game/fx/top';
 import { domToFx, onLayout, view } from '../game/core/stage';
@@ -192,7 +192,7 @@ export class OfficeHud {
       return had;
     };
     set('lv', String(S.lv));
-    set('users', fmtShort(S.xp + Array.from({ length: S.lv - 1 }, (_, i) => xpNeed(i + 1)).reduce((a, b) => a + b, 0)));
+    set('users', fmtShort(userCount()));
     const need = xpNeed(S.lv);
     const xf = barX(S.xp / need);
     if (this.last.xpfill !== xf) {
@@ -200,7 +200,7 @@ export class OfficeHud {
       const fill = this.ref('[data-v="xpfill"]');
       if (fill) fill.style.transform = xf;
     }
-    set('xptxt', `${fmt(S.xp)} / ${fmt(need)}`);
+    set('xptxt', `${Math.floor(S.xp / need * 100)}%`);
     /* 거래액 칩은 값이 올라도 튀지 않음(눈길은 매출·기술력으로) */
     set('gmv', fmtShort(disp.gmv));
     if (set('revenue', fmtShort(disp.revenue))) bump(this.ref('.cur.rev'));
@@ -237,7 +237,7 @@ export function levelInfo(): { title: string; desc: string } {
   const need = xpNeed(S.lv);
   return {
     title: `레벨 ${S.lv}`,
-    desc: `영업기술 ×${lvPowerMult(S.lv).toFixed(2)} · 다음 레벨까지 사용자수 ${fmt(Math.max(0, need - S.xp))}`,
+    desc: `영업기술 ×${lvPowerMult(S.lv).toFixed(2)} · 레벨 성장 ${Math.floor(S.xp / need * 100)}%`,
   };
 }
 
@@ -518,7 +518,7 @@ export class LunchHud {
       this.last.xpfill = xf;
       for (const f of this.all('[data-v="xpfill"]')) f.style.transform = xf;
     }
-    setDom('xptxt', `${fmt(S.xp)} / ${fmt(need)}`);
+    setDom('xptxt', `${Math.floor(S.xp / need * 100)}%`);
     set('gmv', fmt(disp.gmv));
     /* 알약 튀기는 코인이 닿을 때만(bumpAnchor). 숫자가 따라 올라가는 0.1초마다 튀기면 애니메이션이 끊이지 않아 매 프레임 스타일 계산(설계서 7장 3) */
     set('revenue', fmt(disp.revenue));

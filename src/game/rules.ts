@@ -13,6 +13,7 @@ import {
   type ItemDef, type SkillId, type TargetDef, type TreeNode,
 } from './data';
 import { S } from './state';
+import { usersFromXp } from './format';
 import { STRATEGIES } from './strategy';
 
 /* ── 상수 (formulas) ───────────────────────────── */
@@ -120,6 +121,14 @@ export function lunchTime(): number {
   return RUN.BASE_TIME + E.time;
 }
 export const xpNeed = (lv: number) => Math.floor(F.XP.base * Math.pow(F.XP.growth, lv - 1));
+/** Recover lifetime growth points from the existing level/remainder save format. */
+export function totalUserXp(): number {
+  let total = S.xp;
+  for (let lv = 1; lv < S.lv; lv++) total += xpNeed(lv);
+  return total;
+}
+export const userCount = (): number => usersFromXp(totalUserXp());
+export const usersGained = (xp: number): number => userCount() - usersFromXp(Math.max(0, totalUserXp() - xp));
 export const lvPowerMult = (lv: number) => Math.pow(F.XP.powerPerLv, lv - 1);
 
 /* ── 해금 ──────────────────────────────────────── */

@@ -4,7 +4,7 @@
 import { CHAR_BY, DISTRICTS, ITEM_BY, TARGETS, TARGET_BY, UNLOCK_NODE, type DistrictId } from '../game/data';
 import { sfx } from '../game/deps';
 import { fmt, fmtAll, fmtTime, shown, won } from '../game/format';
-import { districtUnlocked } from '../game/rules';
+import { districtUnlocked, userCount, usersGained } from '../game/rules';
 import { S } from '../game/state';
 import type { RunStats } from '../game/lunch/logic';
 import { $, $$, el, iconUri, img, imgFast, nb, srcAttr, warmIcons } from './dom';
@@ -260,7 +260,7 @@ function settleHtml(o: SettleOpts): string {
     <div class="res">
       <div>${imgFast('ic.contracts')}계약<b data-count="${s.count}" data-suf="건">0건</b><span class="note">${nb(`고객사 ${fmt(s.corps)} · 제휴점 ${fmt(s.stores)}`)}</span></div>
       <div>${imgFast('ic.match')}최고 밸런스계약<b>×${s.bestM.toFixed(2)}</b></div>
-      <div>${imgFast('ic.xp')}사용자수<b data-count="${Math.floor(s.xp)}" data-pre="+">+0</b></div>
+      <div>${imgFast('ic.xp')}사용자수<b data-count="${usersGained(s.xp)}" data-pre="+">+0</b></div>
       <div>${imgFast('ic.crit')}대박 계약<b>${fmt(s.crits)}번</b></div>
     </div>
     <div class="gmvline">${imgFast('ic.gmv')}식대 거래액<b data-count="${Math.floor(s.gmv)}" data-pre="+" data-suf="원">+0원</b></div>
@@ -311,7 +311,7 @@ export function endingModal(onClose: () => void): void {
      <div class="art" style="height:190px;display:grid;place-items:center">${img('t.boss@happy', '', 'style="height:190px"')}</div>
      <p>대장그룹 트윈타워까지 계약했어요</p>
      <div class="res">
-       <div>영업일<b>${fmt(S.runs)}일</b></div><div>레벨<b>${S.lv}</b></div>
+       <div>영업일<b>${fmt(S.runs)}일</b></div><div>레벨<b>${S.lv}</b></div><div>사용자수<b>${fmt(userCount())}</b></div>
        <div>도감<b>${found}/${TARGETS.length}</b></div><div>플레이 시간<b>${fmtTime(S.play)}</b></div>
        <div>누적 매출<b>${won(S.revTotal)}</b></div><div>누적 기술력<b>${fmt(S.techTotal)}</b></div>
        <div>누적 식대 거래액<b>${won(S.gmv)}</b></div>

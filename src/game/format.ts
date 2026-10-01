@@ -2,6 +2,10 @@
  * 한국식 숫자 (참치 타이쿤 fmt 그대로): 1만 미만은 콤마, 그 위는 두 단위까지.
  *   1만 8,500 · 4,200만 · 34억 · 1조 2,300억 · 49억 9,902만
  */
+/** Display conversion only: levels and saved growth points retain their original scale. */
+export const USER_XP_SCALE = 1000;
+export const usersFromXp = (xp: number): number => Math.floor(Math.max(0, xp) / USER_XP_SCALE);
+
 const UNITS = ['', '만', '억', '조', '경', '해', '자', '양', '구'];
 
 const comma = (n: number) => {

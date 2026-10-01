@@ -6,7 +6,7 @@ import { CHAR_BY, DISTRICT_BY, SKILLS, TARGET_BY, TREE, TREE_BY, type DistrictId
 import { music, sfx } from '../deps';
 import { fmt, fmtVal } from '../format';
 import {
-  E, anyNodeBuyable, anySkBuyable, canBuyItem, canBuyMastery, canBuyNode, nodeCost, nodeCostObj, nodeLinked, nodeReqName, nodeReqOk, nodeVisible, owns, refreshEff, repUnlocked, statLevels, STAT_MAX, tlv,
+  E, userCount, anyNodeBuyable, anySkBuyable, canBuyItem, canBuyMastery, canBuyNode, nodeCost, nodeCostObj, nodeLinked, nodeReqName, nodeReqOk, nodeVisible, owns, refreshEff, repUnlocked, statLevels, STAT_MAX, tlv,
 } from '../rules';
 import { S, saveGame } from '../state';
 import { buyNode as shopBuyNode } from '../shop';
@@ -83,7 +83,7 @@ export class OfficeScene {
       this.setAuto(false);
       sfx('ui_tap');
       const li = levelInfo();
-      this.sheet.show('ic.level', li.title, li.desc, { extra: `<span class="pz ok">${img('ic.xp')}<small class="hl">사용자수 ${fmt(S.xp)}</small></span>` });
+      this.sheet.show('ic.level', li.title, li.desc, { extra: `<span class="pz ok">${img('ic.xp')}<small class="hl">사용자수 ${fmt(userCount())}</small></span>` });
       if (this.tab === null) this.openTab('tree');
     };
     document.addEventListener('visibilitychange', () => { if (document.hidden) this.setAuto(false); });
