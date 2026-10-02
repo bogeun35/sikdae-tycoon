@@ -32,7 +32,9 @@ export const won1 = (x: number): number => (x > 0 ? Math.max(1, Math.round(x)) :
 /** 보스가 나올 수 있는 가장 이른 판 시간(초) — 영업 시작! 알약 0.95초 + 여유 */
 const BOSS_AFTER = 1.2;
 
+export type SalesMode = 'classic' | 'crowd';
 export interface Ent {
+  crowd?: boolean;
   id: number; t: TargetDef; x: number; y: number; dir: 1 | -1; hp: number; max: number; w: number;
   road: MapRoute | null; lots: number[]; life: number; grace: number; frz: number; hit: number; src: SkillId | null;
   tank: boolean; boss: boolean; dartT: number; dart: number; hopCD: number; hops: number; jetT: number;
@@ -91,6 +93,7 @@ interface Lot { id: number; x: number; y: number; block: number; occ: number }
 interface Big { lots: number[]; x: number; y: number }
 
 export interface RunStats {
+  mode?: SalesMode;
   gmv: number; comm: number; fee: number; rev: number; xp: number; tech: number; count: number; cN: number; rN: number; corps: number; stores: number;
   /** 선물 상자·인바운드 문의로 받은 매출(수수료·이용료와 따로). rev = comm + fee + bonus */
   bonus: number; bonusChest: number; bonusInq: number;
@@ -141,7 +144,7 @@ export class Lunch {
   private plaza: { x: number; y: number };
   private lastTick = 99;
 
-  constructor(map: MapData, public ev: LunchEvents) {
+  constructor(map: MapData, public ev: LunchEvents, readonly mode: SalesMode = 'classic') {
     refreshEff();
     this.map = map;
     this.dist = DISTRICT_BY[S.district];
@@ -167,6 +170,7 @@ export class Lunch {
     for (const id of SKILL_ORDER) this.cd[id] = rnd(F.FIRST_SKILL[0], F.FIRST_SKILL[1]);
     this.gmvMult = 1 + E.gmv + (this.mod.gmv || 0);
     this.stats = {
+      mode,
       gmv: 0, comm: 0, fee: 0, rev: 0, xp: 0, tech: 0, count: 0, cN: 0, rN: 0, corps: 0, stores: 0, bonus: 0, bonusChest: 0, bonusInq: 0, bestM: 1, crits: 0, best: null, newItems: [], newSeen: [],
       lvFrom: S.lv, netC0: S.netC, netR0: S.netR, pendN: 0, released: false, bossSigned: false, boss: null, misses: 0, salesLv: 0, techLv: 0,
     };
@@ -175,7 +179,7 @@ export class Lunch {
   /** 첫 등장 호출 (그림 준비 뒤) */
   begin(): void {
     const maxF = RUN.MAX_TARGETS + E.crowd;
-    for (let i = 0; i < RUN.INIT_CALLS + E.crowd && this.ents.length < maxF; i++) this.spawnFish(true);
+    for (let i = 0; i < (this.mode === 'crowd' ? Math.ceil((RUN.INIT_CALLS + E.crowd) / 3) : RUN.INIT_CALLS + E.crowd) && this.ents.length < maxF; i++) this.spawnFish(true);
   }
 
   get R(): number {
@@ -253,6 +257,7 @@ export class Lunch {
   }
   private place(t: TargetDef, near?: { x: number; y: number }, initial = false): Ent | null {
     if (t.beh === 'boss' && this.t < BOSS_AFTER) t = this.pool[0];
+    if (this.mode === 'crowd' && t.beh !== 'boss') return this.spawnCrowd(t, initial, near)[0] || null;
     if (t.beh === 'road') {
       /* 경로·방향 무작위, 곡선 경로의 끝(화면 밖)에서 출발 */
       const ln = pickOne(this.map.routes);
@@ -285,8 +290,43 @@ export class Lunch {
     l.occ = e.id;
     return e;
   }
+  /** A moving group shares one route, direction and pace; each representative remains one normal contract. */
+  private spawnCrowd(t: TargetDef, initial: boolean, near?: { x: number; y: number }): Ent[] {
+    if (!this.map.routes.length) return [];
+    const route = pickOne(this.map.routes);
+    const len = routeLen(route);
+    const dir: 1 | -1 = rand() < 0.5 ? 1 : -1;
+    let center = len * rnd(0.2, 0.8);
+    if (near) {
+      let best = Infinity;
+      for (let j = 1; j < 10; j++) {
+        const p = routePose(route, len * j / 10, POSE);
+        const d = hyp(p.x - near.x, p.y - near.y);
+        if (d < best) { best = d; center = len * j / 10; }
+      }
+    }
+    const count = Math.min(near ? 1 : 3 + Math.floor(rand() * 3), this.maxTargets() - this.ents.length);
+    const pace = 24 + Math.min(25, t.tier * 1.3) + rnd(0, 9);
+    const representative = { ...t, spd: pace, dash: t.tier >= 4, flee: t.tier >= 2 };
+    const group: Ent[] = [];
+    for (let i = 0; i < count; i++) {
+      const s = Math.max(0, Math.min(len, center + (i - (count - 1) / 2) * this.map.lot * 0.28));
+      const p = routePose(route, s, POSE);
+      const ox = (i % 2 ? 1 : -1) * this.map.lot * 0.14;
+      const oy = -this.map.lot * 0.12;
+      const ax = roadAxis(p.tx * dir, p.ty * dir, 'h');
+      group.push(this.addEnt(representative, p.x + ox, p.y + oy, dir, {
+        crowd: true, road: route, s, ox, oy, rax: ax.ax, rdir: ax.d,
+        w: this.map.lot * (0.4 + Math.min(0.18, t.tier * 0.01)), tank: false,
+        dartT: 2.5 + (center % 2),
+      }, initial));
+    }
+    return group;
+  }
+
   spawnFish(initial = false, force?: TargetDef): void {
     const f = force || this.pickFish();
+    if (this.mode === 'crowd' && f.beh !== 'boss') { this.spawnCrowd(f, initial); return; }
     if (f.beh === 'group') {
       let bl = this.map.blocks
         .filter((b) => b.kind === 'lots')
@@ -342,7 +382,7 @@ export class Lunch {
     if (this.spawnT <= 0 && this.ents.length < maxF) {
       this.spawnFish();
       /* 등장 간격 × 0.6~1.4 (설계서 5-5: 같은 박자로 나오지 않게) */
-      this.spawnT = (RUN.SPAWN_EVERY / (1 + E.spawn + (this.mod.spawn || 0))) * rnd(0.6, 1.4);
+      this.spawnT = (this.mode === 'crowd' ? 3 : 1) * (RUN.SPAWN_EVERY / (1 + E.spawn + (this.mod.spawn || 0))) * rnd(0.6, 1.4);
     }
     if (E.fps) {
       this.fpsT += dt * E.fps;
@@ -406,14 +446,14 @@ export class Lunch {
           }
         }
         let dir = fs.dir;
-        if (fs.t.flee && d < R * RUN.HOP_RANGE) {
+        if (fs.t.flee && d < R * RUN.HOP_RANGE && (!fs.crowd || fs.age % 4 < 0.7)) {
           /* 달아나기: 경로 앞뒤 중 반경에서 먼 쪽으로 */
           const a = routePose(fs.road, fs.s + 8, POSE);
           const da = hyp(a.x + fs.ox - nx, a.y + fs.oy - ny);
           const b = routePose(fs.road, fs.s - 8, POSE);
           const db = hyp(b.x + fs.ox - nx, b.y + fs.oy - ny);
           const nd: 1 | -1 = da >= db ? 1 : -1;
-          if (nd !== fs.dir || !fs.fleeing) this.ev.flee(fs);
+          if (nd !== fs.dir || (!fs.crowd && !fs.fleeing)) this.ev.flee(fs);
           dir = nd;
           fs.dir = nd;
           sp *= 1.6;

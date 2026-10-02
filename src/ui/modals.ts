@@ -6,7 +6,7 @@ import { sfx } from '../game/deps';
 import { fmt, fmtAll, fmtTime, shown, won } from '../game/format';
 import { districtUnlocked, userCount, usersGained } from '../game/rules';
 import { S } from '../game/state';
-import type { RunStats } from '../game/lunch/logic';
+import type { RunStats, SalesMode } from '../game/lunch/logic';
 import { $, $$, el, iconUri, img, imgFast, nb, srcAttr, warmIcons } from './dom';
 import { modLine } from './hud';
 
@@ -58,6 +58,18 @@ export function modalKey(key: 'esc' | 'enter'): boolean {
     return true;
   }
   return true;
+}
+
+export function salesModeModal(onPick: (mode: SalesMode) => void): void {
+  open(`<h2>영업 방식 선택</h2><div class="sales-modes">
+    <button class="sales-mode" data-mode="classic"><span class="mode-icon">🏢</span><b>거래처 영업</b><span>건물을 돌며 계약</span><small>기존 방식</small></button>
+    <button class="sales-mode" data-mode="crowd"><span class="mode-icon">🚶</span><b>거리 영업</b><span>움직이는 무리를 따라 계약</span><small>파랑 기업 · 주황 식당</small></button>
+    </div><div class="sub">재화 · 성장 · 계약 기록 공유</div><div class="btns"><button class="btn light" data-a="cancel">닫기</button></div>`, 'sales-picker');
+  for (const b of $$(box, '[data-mode]')) b.addEventListener('click', () => {
+    const mode = b.dataset.mode as SalesMode; hideModal(); onPick(mode);
+  });
+  $(box, '[data-a="cancel"]')?.addEventListener('click', hideModal);
+  onEsc = hideModal;
 }
 
 /** 확인 창 */
@@ -247,7 +259,7 @@ function settleHtml(o: SettleOpts): string {
      고객사/제휴점 수는 계약 칸 아래에, 요율 풀이는 설정 > 어떻게 하나요에만 */
   const html = `
     <h2>${imgFast('ic.contracts')}${fmt(o.runNo)}영업일이 지났습니다</h2>
-    <div class="sub">${o.districtName}</div>
+    <div class="sub">${o.districtName} · ${s.mode === 'crowd' ? '거리 영업' : '거래처 영업'}</div>
     <div class="bd"><div class="cols"><div class="col">
     <div class="bigline"><div class="lab">${imgFast('ic.revenue')}매출 합계</div><b data-count="${sumShown}" data-fmt="all" data-pre="+" data-suf="원">+0원</b></div>
     <div class="res rev">

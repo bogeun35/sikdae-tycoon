@@ -465,6 +465,7 @@ export class LunchView implements LunchEvents {
   /* ── 대상 ── */
   private texFor(tv: TV): string {
     const e = tv.e;
+    if (e.crowd) return `a.walker${e.t.side === 'corp' ? 0 : 2}@${Math.floor(this.rt * (e.fleeing ? 12 : 7) + e.id) % 2 ? 'a' : 'b'}`;
     const k = tv.keys;
     if (e.road) {
       if (e.rax === 'v') return e.rdir > 0 ? k.down : k.up;
@@ -479,7 +480,7 @@ export class LunchView implements LunchEvents {
   }
   spawn(e: Ent, initial: boolean): void {
     const body = new Container();
-    const key = `t.${e.t.id}@${e.road && e.rax === 'v' ? (e.rdir > 0 ? 'down' : 'up') : 'idle'}`;
+    const key = e.crowd ? `a.walker${e.t.side === 'corp' ? 0 : 2}@a` : `t.${e.t.id}@${e.road && e.rax === 'v' ? (e.rdir > 0 ? 'down' : 'up') : 'idle'}`;
     const spr = new Sprite(T(key));
     spr.anchor.set(0.5, 0.8);
     const add = new Sprite(spr.texture);
@@ -488,6 +489,15 @@ export class LunchView implements LunchEvents {
     add.alpha = 0;
     /* 번쩍일 때만 보임(alpha 0 이어도 add 스프라이트는 대상마다 그리기를 끊음, 설계서 7장 6) */
     add.visible = false;
+    if (e.crowd) {
+      const color = e.t.side === 'corp' ? 0x479dff : 0xffad4b;
+      const ring = new Graphics().ellipse(0, 0, e.w * 0.65, e.w * 0.25).fill({color, alpha:0.3}).stroke({color, width:2.5});
+      body.addChild(ring);
+      const badge = new Sprite(T(e.t.side === 'corp' ? 'ic.corp' : 'ic.store'));
+      badge.anchor.set(0.5); badge.width = badge.height = e.w * 0.42;
+      badge.position.set(e.w * 0.5, -e.w * 0.7);
+      body.addChild(badge);
+    }
     body.addChild(spr, add);
     const box = e.w;
     const shadow = this.takeShadow();

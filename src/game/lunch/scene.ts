@@ -9,7 +9,7 @@ import { L, app, lockOrient, onLayout, view } from '../core/stage';
 import { banner, confetti, dropQueuedBanners, flyCoin, fireworks, holdBanners, levelUpCut, rayCut, setBannerShift, warmTop, type HudId } from '../fx/top';
 import { E, refreshEff, unlockedTargets } from '../rules';
 import { S, saveGame } from '../state';
-import { Lunch, closeRun, type RunStats } from './logic';
+import { Lunch, closeRun, type RunStats, type SalesMode } from './logic';
 import { LunchView, type HudHooks } from './view';
 import { breath, todayMap } from '../map/today';
 import { LunchHud, anchorOf, bumpAnchor, disp } from '../../ui/hud';
@@ -33,7 +33,7 @@ export class LunchScene {
   private lastPtr: { x: number; y: number; touch: boolean } | null = null;
   onEnd: (stats: RunStats, ending: boolean) => void = () => {};
 
-  constructor(readonly hud: LunchHud) {}
+  constructor(readonly hud: LunchHud, readonly mode: SalesMode = 'classic') {}
 
   async start(): Promise<void> {
     this.ended = false;
@@ -80,13 +80,17 @@ export class LunchScene {
       pendingAnchor: (): HudId => 'hud.pending',
     };
     this.view = new LunchView(layers, tex.ground, tex.roads, hooks);
-    this.lunch = new Lunch(layers, this.view);
+    this.lunch = new Lunch(layers, this.view, this.mode);
     this.view.lunch = this.lunch;
     this.view.nums.mult = this.lunch.gmvMult;
     L.world.addChild(this.view.root);
     app.renderer.background.color = DISTRICT_BY[did].pal.ground;
     this.hud.begin(this.lunch.total);
     this.hud.setSpeed(clock.speed);
+    const modeLabel = document.createElement('span');
+    modeLabel.className = 'run-mode';
+    modeLabel.textContent = this.mode === 'crowd' ? '거리 영업 · 파랑 기업 / 주황 식당' : '거래처 영업';
+    this.hud.root.querySelector('.dname')?.appendChild(modeLabel);
     this.bindInput();
     this.offLayout = onLayout(() => this.fixLetterbox());
     this.fixLetterbox();
@@ -104,7 +108,7 @@ export class LunchScene {
     this.lunch.begin();
     const pill = document.createElement('div');
     pill.className = 'startPill';
-    pill.innerHTML = `<img class="ic" src="" alt="">영업 시작!`;
+    pill.innerHTML = `<img class="ic" src="" alt="">${this.mode === 'crowd' ? '거리 영업 시작!' : '거래처 영업 시작!'}`;
     const icon = document.querySelector('#office .go img') as HTMLImageElement | null;
     if (icon) (pill.querySelector('img') as HTMLImageElement).src = icon.src;
     this.hud.root.appendChild(pill);

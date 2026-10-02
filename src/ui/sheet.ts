@@ -13,7 +13,24 @@ export type SheetState = 'buy' | 'max' | 'link' | 'lock' | 'none';
 export type { Cost };
 
 export class Sheet {
-  constructor(readonly el: HTMLElement) {}
+  constructor(readonly el: HTMLElement) {
+    let startY: number | null = null;
+    el.addEventListener('click', e => {
+      if ((e.target as HTMLElement).closest('[data-sheet-close]')) {
+        e.preventDefault(); e.stopPropagation(); this.hide();
+      }
+    });
+    el.addEventListener('pointerdown', e => {
+      if (!(e.target as HTMLElement).closest('[data-sheet-drag]')) return;
+      startY = e.clientY; el.setPointerCapture(e.pointerId); e.stopPropagation();
+    });
+    el.addEventListener('pointerup', e => {
+      if (startY !== null && e.clientY - startY > 40) this.hide();
+      startY = null;
+      if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
+    });
+    el.addEventListener('pointercancel', () => { startY = null; });
+  }
   private cur: (() => void) | null = null;
 
   show(icon: string, name: string, desc: string, o: { cost?: Cost | null; state?: SheetState; lockText?: string; extra?: string; sub?: string; okText?: string; chips?: string } = {}): void {
@@ -29,7 +46,7 @@ export class Sheet {
       const ok = payable(c);
       right = `<span class="pz ${ok ? 'ok' : 'no'}"><span class="grp">${costTxt(c)}</span><small class="hl">${ok ? `${img('ic.doubleTap')} ${o.okText || '두 번 누르면 구매!'}` : `${lackOf(c)} 부족`}</small>${own}</span>`;
     }
-    this.el.innerHTML = `<div class="sic">${iconHtml}</div><div class="t"><div class="nm">${name}${o.sub ? `<small>${o.sub}</small>` : ''}</div><div class="ds">${o.chips || ''}<span class="effect-value">${desc}</span></div></div>${right}`;
+    this.el.innerHTML = `<div class="sheet-grip" data-sheet-drag aria-hidden="true"><i></i></div><button class="sheet-close" data-sheet-close aria-label="상세창 닫기">×</button><div class="sic">${iconHtml}</div><div class="t"><div class="nm">${name}${o.sub ? `<small>${o.sub}</small>` : ''}</div><div class="ds">${o.chips || ''}<span class="effect-value">${desc}</span></div></div>${right}`;
     this.el.classList.add('show');
   }
   hide(): void {

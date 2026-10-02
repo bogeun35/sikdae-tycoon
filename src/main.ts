@@ -12,7 +12,7 @@ import { storage } from './storage';
 import { injectStyle } from './ui/style';
 import { clearToasts, img, installButtonFeel, mountToasts, toast } from './ui/dom';
 import { LunchHud, anchorOf, bumpAnchor, displayBusy, snapDisplay, tickDisplay } from './ui/hud';
-import { districtModal, endingModal, hideModal, modalKey, modalOpen, mountModal, settleModal, confirmBox, warmSettleIcons, warmSettleLayout } from './ui/modals';
+import { salesModeModal, districtModal, endingModal, hideModal, modalKey, modalOpen, mountModal, settleModal, confirmBox, warmSettleIcons, warmSettleLayout } from './ui/modals';
 import { NoWebGLError, app, fxApp, applyResolution, initStage, layout, markFx, onLayout, setResolutionFn, takeFx, uiRoot, view } from './game/core/stage';
 import { fpsCap, onFrame, perf, requestRender, setAwake, setContinuous, setFpsCap, setFxNeeds, startLoop } from './game/core/loop';
 import { budget, currentTier, fpsTarget, lowerTier, onTierChange, renderRes, sampleFrame, setMaxTexture, wantAntialias, watchFrames } from './game/core/quality';
@@ -424,11 +424,14 @@ async function enterOffice(firstTime: boolean): Promise<void> {
   busy = false;
 }
 
-async function goLunch(): Promise<void> {
+let selectedSalesMode: import('./game/lunch/logic').SalesMode = 'classic';
+async function goLunch(mode?: import('./game/lunch/logic').SalesMode): Promise<void> {
   if (busy || scene === 'lunch') return;
+  if (!mode) { salesModeModal(picked => void goLunch(picked)); return; }
+  selectedSalesMode = mode;
   busy = true;
   hideModal();
-  lunch = new LunchScene(lunchHud);
+  lunch = new LunchScene(lunchHud, selectedSalesMode);
   lunch.onEnd = (st, ending) => onLunchEnd(st, ending);
   await wipe(async () => {
     /* 뒤에서 굽던 영업 그림이 아직이면 와이프가 덮은 채로 기다림 */
@@ -453,7 +456,7 @@ function onLunchEnd(st: RunStats, ending: boolean): void {
       lunch?.destroy();
       flushResolution();
       clearTop();
-      lunch = new LunchScene(lunchHud);
+      lunch = new LunchScene(lunchHud, selectedSalesMode);
       lunch.onEnd = (s2, e2) => onLunchEnd(s2, e2);
       await lunch.start();
     });

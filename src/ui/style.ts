@@ -679,6 +679,16 @@ body.touching .mb .tip { display:none; }
 #ui #lunch .lhud .r2 .dname {order:4;background:none;padding:0;}
 #ui #lunch .lhud .r2 .lfs {order:5;background:none;border:0;box-shadow:none;}
 #ui #lunch .portL {display:none;}
+
+.sales-modes {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:18px 0;}
+.sales-mode {display:flex;flex-direction:column;align-items:center;gap:10px;padding:24px 10px;border:2px solid #d9c9a7;border-radius:18px;background:#fff8e7;color:#503d25;cursor:pointer;}
+.sales-mode:hover,.sales-mode:focus-visible {border-color:#e5a735;background:#fff0be;}
+.sales-mode b {font-size:21px;}.sales-mode span:not(.mode-icon) {font-size:13px;}.sales-mode small {font-size:11px;color:#766349;}
+.mode-icon {font-size:38px;}.run-mode {font-size:10px;opacity:.8;margin-left:6px;}
+#ui .sheet {padding-top:22px;padding-right:48px;max-height:36%;overflow-y:auto;overscroll-behavior:contain;}
+#ui .sheet-close {position:absolute;right:4px;top:4px;width:40px;height:40px;border:0;border-radius:50%;background:#e9dfcc;color:#503d25;font-size:28px;line-height:1;cursor:pointer;}
+#ui .sheet-grip {position:absolute;top:0;left:50%;transform:translateX(-50%);height:22px;width:96px;display:grid;place-items:center;touch-action:none;cursor:grab;}
+#ui .sheet-grip i {width:38px;height:4px;background:#b7a88d;border-radius:2px;}
 ${kindCss()}  
 `;
 
